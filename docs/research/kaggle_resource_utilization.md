@@ -53,7 +53,7 @@
 
 ## Next step
 
-本轮已先落地一个低风险、可回退的输入流水线修复：`load_real_data(max_samples=...)` 在采样工程运行中按年度文件使用最多 4 个受控线程，并先对采样索引排序后读取 memmap，避免单线程随机页访问；正式 Notebook 还会在每次运行前同步仓库到 `origin/main`，并配置有限的 DataLoader worker、prefetch 和 pinned memory。一次本地 120,000 样本加载基准由约 26 秒降至约 4 秒；这只是本机 I/O 基准，不代表 Kaggle 端到端加速。双卡 DDP、AMP 和 full out-of-core Dataset 仍应作为独立 benchmark，不在没有峰值 RSS/显存/指标证据时默认开启。
+本轮已先落地低风险、可回退的输入流水线修复：`load_real_data(max_samples=...)` 在采样工程运行中按年度文件使用最多 4 个受控线程，并先对采样索引排序后读取 memmap，避免单线程随机页访问；正式 Notebook 还会在每次运行前同步仓库到 `origin/main`，把 Kaggle 只读输入 staging 到本地工作盘，并配置有限的 DataLoader worker、prefetch 和 pinned memory。一次本地 120,000 样本加载基准由约 26 秒降至约 4 秒；这只是本机 I/O 基准，不代表 Kaggle 端到端加速。当前 Notebook 额外提供 `DataParallel` 作为双卡即时利用率检查；正式论文级多卡结果仍应使用两进程 DDP，不能把 DataParallel 的吞吐直接写成最终结论。
 
 ## Reopen condition
 

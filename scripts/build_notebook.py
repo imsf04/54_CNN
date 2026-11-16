@@ -117,16 +117,21 @@ assert all(int(str(date)[:4]) <= 1999 for date in splits['train'].dates)
 assert all(int(str(date)[:4]) > 1999 for date in splits['test'].dates)"""),
         md("""## 2. 依次训练 Logistic、MLP、CNN
 
-三种模型使用相同的样本和 DataLoader。每个模型单独保存最佳 checkpoint、训练历史和测试预测。"""),
+三种模型使用相同的样本和 DataLoader。检测到多张 CUDA 卡时，Notebook 使用双 GPU 数据并行；每个模型单独保存最佳 checkpoint、训练历史和测试预测。"""),
         code("""NUM_WORKERS = min(4, max(1, (os.cpu_count() or 1) // 2))
 LOADER_OPTIONS = {'batch_size': PAPER_20D.batch_size, 'pin_memory': DEVICE.type == 'cuda'}
 if NUM_WORKERS:
     LOADER_OPTIONS.update({'num_workers': NUM_WORKERS, 'persistent_workers': True, 'prefetch_factor': 2})
 loaders = {name: DataLoader(ImageDataset(part), shuffle=name == 'train', **LOADER_OPTIONS) for name, part in splits.items()}
 factories = {'logistic': LogisticBaseline, 'mlp': MLPBaseline, 'cnn': PriceTrendCNN}
+MULTI_GPU = DEVICE.type == 'cuda' and torch.cuda.device_count() > 1
+GPU_IDS = list(range(torch.cuda.device_count())) if MULTI_GPU else []
+print({'multi_gpu': MULTI_GPU, 'gpu_ids': GPU_IDS, 'global_batch_size': PAPER_20D.batch_size})
 models, histories, results = {}, {}, {}
 for name, factory in factories.items():
     model = factory()
+    if MULTI_GPU:
+        model = torch.nn.DataParallel(model, device_ids=GPU_IDS)
     history = fit(model, loaders['train'], loaders['val'], epochs=MAX_EPOCHS, device=DEVICE, checkpoint=OUTPUT_DIR / f'{name}_20d.pt')
     models[name], histories[name] = model, history
     results[name] = evaluate_model(model, splits['test'], loaders['test'], DEVICE)
