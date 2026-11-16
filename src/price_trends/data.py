@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import Dataset
 
 from .adapters.data_source import resolve_data_dir
-from .domain import DataBundle, SplitBundle
+from .domain import DataBundle, LazyDataBundle, SplitBundle
 from .references import COURSE_DEV_END_YEAR, REPRODUCIBILITY_SEED
 
 
@@ -71,31 +71,21 @@ def _target_column(frame, target: str) -> str:
     raise KeyError(f"找不到目标列 {target!r}; 可用列: {list(frame.columns)}")
 
 
-def load_real_data(
-    data_dir: str | Path | None = None,
-    target: str = "Retx_20d_label",
-    horizon: str = "20d",
-    return_column: str | None = None,
-    max_samples: int | None = None,
-) -> DataBundle:
-    """Load and align one `.dat` image file with one Feather label file."""
-
-    import pandas as pd
-
-    root = resolve_data_dir(data_dir)
+def _discover_pairs(root: Path, horizon: str) -> tuple[dict[int, Path], dict[int, Path], list[int]]:
+    horizon_key = horizon.replace("-", "").lower()
     image_files = {
         year: path
         for path in root.rglob("*.dat")
         if "__MACOSX" not in path.parts and not path.name.startswith("._")
         for year in [_year_from_name(path)]
-        if year is not None and horizon.replace("-", "").lower() in path.name.lower().replace("-", "")
+        if year is not None and horizon_key in path.name.lower().replace("-", "")
     }
     label_files = {
         year: path
         for path in root.rglob("*.feather")
         if "__MACOSX" not in path.parts and not path.name.startswith("._")
         for year in [_year_from_name(path)]
-        if year is not None and horizon.replace("-", "").lower() in path.name.lower().replace("-", "")
+        if year is not None and horizon_key in path.name.lower().replace("-", "")
     }
     if not image_files or not label_files:
         image_path = _find_file(root, ".dat", horizon)
@@ -104,12 +94,44 @@ def load_real_data(
     years = sorted(set(image_files) & set(label_files))
     if not years:
         raise ValueError("没有找到可配对的年度图像和标签文件")
-    def load_year(year: int) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, str]:
+    return image_files, label_files, years
+
+
+def load_real_data(
+    data_dir: str | Path | None = None,
+    target: str = "Retx_20d_label",
+    horizon: str = "20d",
+    return_column: str | None = None,
+    max_samples: int | None = None,
+    lazy: bool = False,
+) -> DataBundle | LazyDataBundle:
+    """Load aligned data, optionally keeping image bytes on disk until batching."""
+
+    import pandas as pd
+
+    root = resolve_data_dir(data_dir)
+    image_files, label_files, years = _discover_pairs(root, horizon)
+
+    def load_year(
+        year: int,
+    ) -> tuple[
+        int,
+        Path,
+        int,
+        np.ndarray | None,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray | None,
+        str,
+    ]:
         image_path, label_path = image_files[year], label_files[year]
         image_bytes = np.memmap(image_path, dtype=np.uint8, mode="r")
         if image_bytes.size % (64 * 60):
             raise ValueError(f"图像文件大小不能整除 64*60: {image_path}")
-        images = image_bytes.reshape(-1, 64, 60)
+        image_count = image_bytes.size // (64 * 60)
+        images = image_bytes.reshape(image_count, 64, 60)
         labels = pd.read_feather(label_path)
         if len(images) != len(labels):
             raise ValueError(f"图像数 {len(images)} 与标签行数 {len(labels)} 不一致: {image_path}, {label_path}")
@@ -138,9 +160,13 @@ def load_real_data(
             selected_returns = pd.to_numeric(
                 labels.iloc[valid_indices][return_column], errors="coerce"
             ).to_numpy("float32")
+        selected_images = None if lazy else np.asarray(images[valid_indices])
         return (
             year,
-            np.asarray(images[valid_indices]),
+            image_path,
+            image_count,
+            selected_images,
+            valid_indices.astype("int32"),
             y.iloc[valid_indices].to_numpy("int64"),
             dates.iloc[valid_indices].to_numpy(),
             labels.iloc[valid_indices][stock_column].to_numpy(),
@@ -148,7 +174,7 @@ def load_real_data(
             target_column,
         )
 
-    if max_samples is not None and len(years) > 1:
+    if lazy or (max_samples is not None and len(years) > 1):
         workers = min(4, len(years), max(1, os.cpu_count() or 1))
         with ThreadPoolExecutor(max_workers=workers) as executor:
             year_parts = list(executor.map(load_year, years))
@@ -158,25 +184,49 @@ def load_real_data(
     target_columns = {part[-1] for part in year_parts}
     if len(target_columns) != 1:
         raise ValueError(f"年度标签文件的目标列不一致: {sorted(target_columns)}")
-    image_parts = [part[1] for part in year_parts]
-    label_parts = [part[2] for part in year_parts]
-    date_parts = [part[3] for part in year_parts]
-    stock_parts = [part[4] for part in year_parts]
-    return_parts = [part[5] for part in year_parts if part[5] is not None]
+    label_parts = [part[5] for part in year_parts]
+    date_parts = [part[6] for part in year_parts]
+    stock_parts = [part[7] for part in year_parts]
+    return_parts = [part[8] for part in year_parts if part[8] is not None]
     if not label_parts or sum(len(part) for part in label_parts) == 0:
         raise ValueError("删除缺失标签后没有有效二分类样本")
     returns = np.concatenate(return_parts) if len(return_parts) == len(years) else None
+    labels = np.concatenate(label_parts)
+    dates = np.concatenate(date_parts)
+    stock_ids = np.concatenate(stock_parts)
+    if lazy:
+        image_paths = tuple(part[1] for part in year_parts)
+        image_counts = tuple(part[2] for part in year_parts)
+        file_ids = np.concatenate(
+            [np.full(len(part[4]), index, dtype="int16") for index, part in enumerate(year_parts)]
+        )
+        row_indices = np.concatenate([part[4] for part in year_parts])
+        return LazyDataBundle(
+            image_paths=image_paths,
+            image_counts=image_counts,
+            file_ids=file_ids,
+            row_indices=row_indices,
+            labels=labels,
+            dates=dates,
+            stock_ids=stock_ids,
+            returns=returns,
+            horizon=horizon,
+        )
+    image_parts = [part[3] for part in year_parts if part[3] is not None]
     return DataBundle(
         images=np.concatenate(image_parts),
-        labels=np.concatenate(label_parts),
-        dates=np.concatenate(date_parts),
-        stock_ids=np.concatenate(stock_parts),
+        labels=labels,
+        dates=dates,
+        stock_ids=stock_ids,
         returns=returns,
         horizon=horizon,
     )
 
 
-def temporal_split(bundle: DataBundle, dev_end: int = COURSE_DEV_END_YEAR) -> dict[str, DataBundle]:
+def temporal_split(
+    bundle: DataBundle | LazyDataBundle,
+    dev_end: int = COURSE_DEV_END_YEAR,
+) -> dict[str, DataBundle | LazyDataBundle]:
     """Apply the course's 1993--1999 development / 2000+ test split."""
 
     years = np.asarray([int(str(date)[:4]) for date in bundle.dates])
@@ -190,27 +240,57 @@ def temporal_split(bundle: DataBundle, dev_end: int = COURSE_DEV_END_YEAR) -> di
     if cut == len(development):
         cut -= 1
 
-    def take(indices: np.ndarray) -> DataBundle:
+    def take(indices: np.ndarray) -> DataBundle | LazyDataBundle:
         returns = None if bundle.returns is None else bundle.returns[indices]
         stock_ids = None if bundle.stock_ids is None else bundle.stock_ids[indices]
+        if isinstance(bundle, LazyDataBundle):
+            return LazyDataBundle(
+                image_paths=bundle.image_paths,
+                image_counts=bundle.image_counts,
+                file_ids=bundle.file_ids[indices],
+                row_indices=bundle.row_indices[indices],
+                labels=bundle.labels[indices],
+                dates=bundle.dates[indices],
+                stock_ids=stock_ids,
+                returns=returns,
+                horizon=bundle.horizon,
+            )
         return DataBundle(images=bundle.images[indices], labels=bundle.labels[indices], dates=bundle.dates[indices], stock_ids=stock_ids, returns=returns, horizon=bundle.horizon)
 
     return {"train": take(development[:cut]), "val": take(development[cut:]), "test": take(test)}
 
 
 class ImageDataset(Dataset):
-    def __init__(self, bundle: DataBundle) -> None:
-        images = bundle.images.astype("float32")
-        if images.size and images.max() > 1:
-            images /= 255.0
-        self.x = torch.from_numpy(images)[:, None]
+    def __init__(self, bundle: DataBundle | LazyDataBundle) -> None:
         self.y = torch.from_numpy(bundle.labels.astype("int64"))
+        self.x = None
+        self._maps: dict[int, np.memmap] = {}
+        self._bundle = bundle
+        if isinstance(bundle, DataBundle):
+            images = bundle.images.astype("float32")
+            if images.size and images.max() > 1:
+                images /= 255.0
+            self.x = torch.from_numpy(images)[:, None]
 
     def __len__(self) -> int:
         return len(self.y)
 
     def __getitem__(self, index: int):
-        return self.x[index], self.y[index]
+        if self.x is not None:
+            return self.x[index], self.y[index]
+        bundle = self._bundle
+        file_id = int(bundle.file_ids[index])
+        image_map = self._maps.get(file_id)
+        if image_map is None:
+            image_map = np.memmap(
+                bundle.image_paths[file_id],
+                dtype=np.uint8,
+                mode="r",
+                shape=(bundle.image_counts[file_id], 64, 60),
+            )
+            self._maps[file_id] = image_map
+        image = np.asarray(image_map[int(bundle.row_indices[index])], dtype="float32") / 255.0
+        return torch.from_numpy(image[None]), self.y[index]
 
 
-__all__ = ["DataBundle", "ImageDataset", "SplitBundle", "load_real_data", "make_synthetic_data", "temporal_split"]
+__all__ = ["DataBundle", "ImageDataset", "LazyDataBundle", "SplitBundle", "load_real_data", "make_synthetic_data", "temporal_split"]

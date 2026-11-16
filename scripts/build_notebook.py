@@ -60,7 +60,9 @@ if not DATA_INPUT.exists() and Path('/kaggle/input').exists():
 OUTPUT_DIR = ROOT / 'artifacts/kaggle_20d'
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MAX_EPOCHS = 100
-MAX_SAMPLES = int(os.getenv('PRICE_TRENDS_MAX_SAMPLES', '120000'))  # RAM-safe engineering run
+MAX_SAMPLES_ENV = os.getenv('PRICE_TRENDS_MAX_SAMPLES')
+MAX_SAMPLES = int(MAX_SAMPLES_ENV) if MAX_SAMPLES_ENV else None
+LAZY_IMAGES = True
 archives = sorted(DATA_INPUT.rglob('*.zip'))
 if archives:
     import zipfile
@@ -101,15 +103,16 @@ if str(DATA_DIR).startswith('/kaggle/input'):
     if not has_data(staged_dir):
         raise FileNotFoundError(f'本地 staging 后仍未找到 .dat/.feather: {staged_dir}')
     DATA_DIR = staged_dir
-print({'root': str(ROOT), 'revision': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', '--short', 'HEAD']).decode().strip(), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cuda': torch.cuda.is_available(), 'cuda_devices': torch.cuda.device_count(), 'cpu_threads': CPU_THREADS})"""),
+print({'root': str(ROOT), 'revision': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', '--short', 'HEAD']).decode().strip(), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cuda': torch.cuda.is_available(), 'cuda_devices': torch.cuda.device_count(), 'cpu_threads': CPU_THREADS, 'lazy_images': LAZY_IMAGES, 'max_samples': MAX_SAMPLES})"""),
         md("""## 1. 数据审计与加载
 
 确认数据目录包含 `.dat` 和 `.feather`。loader 会检查 64×60 图像、Date、StockID、标签有效性以及 Date + StockID 的缺失/重复；任何错误都会直接停止。"""),
         code("""from price_trends.data import load_real_data, temporal_split
 
-print(f'Loading up to {MAX_SAMPLES:,} samples with bounded parallel file reads ...')
-bundle = load_real_data(DATA_DIR, target='Retx_20d_label', horizon='20d', return_column='Retx_20d', max_samples=MAX_SAMPLES)
-print(f'Loaded image tensor: {bundle.images.shape}, dtype={bundle.images.dtype}')
+sample_message = f'{MAX_SAMPLES:,}' if MAX_SAMPLES is not None else 'all available'
+print(f'Loading {sample_message} samples with lazy memmap batches ...')
+bundle = load_real_data(DATA_DIR, target='Retx_20d_label', horizon='20d', return_column='Retx_20d', max_samples=MAX_SAMPLES, lazy=LAZY_IMAGES)
+print(f'Loaded metadata for {len(bundle.labels):,} samples; lazy_images={LAZY_IMAGES}')
 splits = temporal_split(bundle)
 display(pd.DataFrame({name: {'n': len(part.labels), 'positive_rate': part.labels.mean(), 'first': str(part.dates.min()), 'last': str(part.dates.max())} for name, part in splits.items()}).T)
 assert set(splits) == {'train', 'val', 'test'}
