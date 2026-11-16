@@ -46,6 +46,8 @@ from price_trends.services.training import fit, set_seed
 set_seed(REPRODUCIBILITY_SEED)
 DEVICE = select_device('auto')
 DATA_INPUT = Path(os.getenv('PRICE_TRENDS_DATA_DIR', '/kaggle/input/price-trends-20d'))
+if not DATA_INPUT.exists():
+    DATA_INPUT = Path('/kaggle/input/datasets/imsfp04/price-trends-20d')
 OUTPUT_DIR = ROOT / 'artifacts/kaggle_20d'
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MAX_EPOCHS = 100
