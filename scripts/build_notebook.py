@@ -53,6 +53,10 @@ set_seed(REPRODUCIBILITY_SEED)
 DEVICE = select_device('auto')
 CPU_THREADS = min(4, max(1, os.cpu_count() or 1))
 torch.set_num_threads(CPU_THREADS)
+if DEVICE.type == 'cuda':
+    for device_id in range(torch.cuda.device_count()):
+        torch.empty(1, device=f'cuda:{device_id}')
+    torch.cuda.set_device(0)
 DEFAULT_DATA_INPUT = '/kaggle/input/price-trends-20d' if Path('/kaggle/input').exists() else '/content/price-trends-20d'
 DATA_INPUT = Path(os.getenv('PRICE_TRENDS_DATA_DIR', DEFAULT_DATA_INPUT))
 if not DATA_INPUT.exists() and Path('/kaggle/input').exists():
@@ -134,6 +138,7 @@ models, histories, results = {}, {}, {}
 for name, factory in factories.items():
     model = factory()
     if MULTI_GPU:
+        model.to(DEVICE)
         model = torch.nn.DataParallel(model, device_ids=GPU_IDS)
     history = fit(model, loaders['train'], loaders['val'], epochs=MAX_EPOCHS, device=DEVICE, checkpoint=OUTPUT_DIR / f'{name}_20d.pt')
     models[name], histories[name] = model, history
