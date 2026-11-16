@@ -17,8 +17,9 @@ def main() -> None:
     cells = [
         md("""# Price Trends：Kaggle/Colab 正式 20-day 实验
 
-按顺序运行所有代码单元。Notebook 使用同一份 20-day 图像，分别训练 Logistic、MLP 和 CNN，并保存 checkpoint、训练曲线、测试预测和指标。测试集只在最后评估。"""),
-        code("""from pathlib import Path
+按顺序运行所有代码单元。Notebook 使用同一份 20-day 图像，分别训练 Logistic、MLP 和 CNN，并保存 checkpoint、训练曲线、测试预测和指标。测试集只在最后评估。首次运行会把 Kaggle 只读输入盘上的数据 staging 到 `/kaggle/working` 本地盘，避免随机读取远端挂载。"""),
+        code("""from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 import os
 import shutil
 import subprocess
@@ -73,6 +74,33 @@ if archives:
         print(f'Extracted to {DATA_DIR}')
 else:
     DATA_DIR = DATA_INPUT
+
+def has_data(root):
+    return any(root.rglob('*.dat')) and any(root.rglob('*.feather'))
+
+if str(DATA_DIR).startswith('/kaggle/input'):
+    staged_dir = ROOT / 'data/kaggle_staged'
+    source_files = sorted([*DATA_DIR.rglob('*.dat'), *DATA_DIR.rglob('*.feather')])
+    pending = [
+        source for source in source_files
+        if not (staged_dir / source.relative_to(DATA_DIR)).exists()
+        or (staged_dir / source.relative_to(DATA_DIR)).stat().st_size != source.stat().st_size
+    ]
+    if pending:
+        print(f'Staging {len(pending)} data files onto local working disk ...')
+
+        def copy_one(source):
+            target = staged_dir / source.relative_to(DATA_DIR)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            return target
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            for index, target in enumerate(executor.map(copy_one, pending), start=1):
+                print(f'[{index}/{len(pending)}] staged {target.name}')
+    if not has_data(staged_dir):
+        raise FileNotFoundError(f'本地 staging 后仍未找到 .dat/.feather: {staged_dir}')
+    DATA_DIR = staged_dir
 print({'root': str(ROOT), 'revision': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', '--short', 'HEAD']).decode().strip(), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cuda': torch.cuda.is_available(), 'cuda_devices': torch.cuda.device_count(), 'cpu_threads': CPU_THREADS})"""),
         md("""## 1. 数据审计与加载
 
