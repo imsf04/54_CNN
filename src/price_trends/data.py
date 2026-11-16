@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -102,13 +104,7 @@ def load_real_data(
     years = sorted(set(image_files) & set(label_files))
     if not years:
         raise ValueError("没有找到可配对的年度图像和标签文件")
-    image_parts: list[np.ndarray] = []
-    label_parts: list[np.ndarray] = []
-    date_parts: list[np.ndarray] = []
-    stock_parts: list[np.ndarray] = []
-    return_parts: list[np.ndarray] = []
-    target_column = None
-    for year in years:
+    def load_year(year: int) -> tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, str]:
         image_path, label_path = image_files[year], label_files[year]
         image_bytes = np.memmap(image_path, dtype=np.uint8, mode="r")
         if image_bytes.size % (64 * 60):
@@ -134,16 +130,42 @@ def load_real_data(
         if max_samples is not None:
             per_year = max(1, max_samples // len(years))
             rng = np.random.default_rng(7 + year)
-            valid_indices = rng.choice(valid_indices, size=min(per_year, len(valid_indices)), replace=False)
-        image_parts.append(np.asarray(images[valid_indices]))
-        label_parts.append(y.iloc[valid_indices].to_numpy("int64"))
-        date_parts.append(dates.iloc[valid_indices].to_numpy())
-        stock_parts.append(labels.iloc[valid_indices][stock_column].to_numpy())
+            valid_indices = np.sort(
+                rng.choice(valid_indices, size=min(per_year, len(valid_indices)), replace=False)
+            )
+        selected_returns = None
         if return_column and return_column in labels.columns:
-            return_parts.append(pd.to_numeric(labels.iloc[valid_indices][return_column], errors="coerce").to_numpy("float32"))
+            selected_returns = pd.to_numeric(
+                labels.iloc[valid_indices][return_column], errors="coerce"
+            ).to_numpy("float32")
+        return (
+            year,
+            np.asarray(images[valid_indices]),
+            y.iloc[valid_indices].to_numpy("int64"),
+            dates.iloc[valid_indices].to_numpy(),
+            labels.iloc[valid_indices][stock_column].to_numpy(),
+            selected_returns,
+            target_column,
+        )
+
+    if max_samples is not None and len(years) > 1:
+        workers = min(4, len(years), max(1, os.cpu_count() or 1))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            year_parts = list(executor.map(load_year, years))
+    else:
+        year_parts = [load_year(year) for year in years]
+
+    target_columns = {part[-1] for part in year_parts}
+    if len(target_columns) != 1:
+        raise ValueError(f"年度标签文件的目标列不一致: {sorted(target_columns)}")
+    image_parts = [part[1] for part in year_parts]
+    label_parts = [part[2] for part in year_parts]
+    date_parts = [part[3] for part in year_parts]
+    stock_parts = [part[4] for part in year_parts]
+    return_parts = [part[5] for part in year_parts if part[5] is not None]
     if not label_parts or sum(len(part) for part in label_parts) == 0:
         raise ValueError("删除缺失标签后没有有效二分类样本")
-    returns = np.concatenate(return_parts) if return_parts and len(return_parts) == len(years) else None
+    returns = np.concatenate(return_parts) if len(return_parts) == len(years) else None
     return DataBundle(
         images=np.concatenate(image_parts),
         labels=np.concatenate(label_parts),

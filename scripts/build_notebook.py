@@ -20,20 +20,25 @@ def main() -> None:
 按顺序运行所有代码单元。Notebook 使用同一份 20-day 图像，分别训练 Logistic、MLP 和 CNN，并保存 checkpoint、训练曲线、测试预测和指标。测试集只在最后评估。"""),
         code("""from pathlib import Path
 import os
-import sys
-import json
+import shutil
 import subprocess
+import sys
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-ROOT = Path('/kaggle/working/54_CNN')
-if not (ROOT / 'src').exists():
-    subprocess.run(['git', 'clone', 'https://github.com/imsf04/54_CNN.git', str(ROOT)], check=True)
+WORKSPACE = Path('/kaggle/working') if Path('/kaggle/working').exists() else Path('/content')
+ROOT = WORKSPACE / '54_CNN'
+REPO_URL = 'https://github.com/imsf04/54_CNN.git'
+if (ROOT / '.git').exists():
+    subprocess.run(['git', '-C', str(ROOT), 'fetch', 'origin', 'main'], check=True)
+    subprocess.run(['git', '-C', str(ROOT), 'reset', '--hard', 'origin/main'], check=True)
+elif ROOT.exists():
+    shutil.rmtree(ROOT)
+    subprocess.run(['git', 'clone', REPO_URL, str(ROOT)], check=True)
+else:
+    subprocess.run(['git', 'clone', REPO_URL, str(ROOT)], check=True)
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-e', str(ROOT)], check=True)
-ROOT = Path.cwd()
-if not (ROOT / 'src').exists():
-    ROOT = Path('/kaggle/working/54_CNN') if (Path('/kaggle/working/54_CNN') / 'src').exists() else Path('/content/54_CNN')
 sys.path.insert(0, str(ROOT / 'src'))
 
 from price_trends.adapters.runtime import select_device
@@ -45,30 +50,38 @@ from price_trends.services.training import fit, set_seed
 
 set_seed(REPRODUCIBILITY_SEED)
 DEVICE = select_device('auto')
-DATA_INPUT = Path(os.getenv('PRICE_TRENDS_DATA_DIR', '/kaggle/input/price-trends-20d'))
-if not DATA_INPUT.exists():
+CPU_THREADS = min(4, max(1, os.cpu_count() or 1))
+torch.set_num_threads(CPU_THREADS)
+DEFAULT_DATA_INPUT = '/kaggle/input/price-trends-20d' if Path('/kaggle/input').exists() else '/content/price-trends-20d'
+DATA_INPUT = Path(os.getenv('PRICE_TRENDS_DATA_DIR', DEFAULT_DATA_INPUT))
+if not DATA_INPUT.exists() and Path('/kaggle/input').exists():
     DATA_INPUT = Path('/kaggle/input/datasets/imsfp04/price-trends-20d')
 OUTPUT_DIR = ROOT / 'artifacts/kaggle_20d'
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MAX_EPOCHS = 100
-MAX_SAMPLES = 120_000  # RAM-safe engineering run
-if any(DATA_INPUT.rglob('*.zip')):
+MAX_SAMPLES = int(os.getenv('PRICE_TRENDS_MAX_SAMPLES', '120000'))  # RAM-safe engineering run
+archives = sorted(DATA_INPUT.rglob('*.zip'))
+if archives:
     import zipfile
     DATA_DIR = ROOT / 'data/kaggle_extracted'
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    archive = next(DATA_INPUT.rglob('*.zip'))
+    archive = archives[0]
     if not any(DATA_DIR.rglob('*.dat')):
+        print(f'Extracting {archive} ...')
         with zipfile.ZipFile(archive) as zipped:
             zipped.extractall(DATA_DIR)
+        print(f'Extracted to {DATA_DIR}')
 else:
     DATA_DIR = DATA_INPUT
-print({'root': str(ROOT), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cuda': torch.cuda.is_available()})"""),
+print({'root': str(ROOT), 'revision': subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', '--short', 'HEAD']).decode().strip(), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cuda': torch.cuda.is_available(), 'cuda_devices': torch.cuda.device_count(), 'cpu_threads': CPU_THREADS})"""),
         md("""## 1. 数据审计与加载
 
 确认数据目录包含 `.dat` 和 `.feather`。loader 会检查 64×60 图像、Date、StockID、标签有效性以及 Date + StockID 的缺失/重复；任何错误都会直接停止。"""),
         code("""from price_trends.data import load_real_data, temporal_split
 
+print(f'Loading up to {MAX_SAMPLES:,} samples with bounded parallel file reads ...')
 bundle = load_real_data(DATA_DIR, target='Retx_20d_label', horizon='20d', return_column='Retx_20d', max_samples=MAX_SAMPLES)
+print(f'Loaded image tensor: {bundle.images.shape}, dtype={bundle.images.dtype}')
 splits = temporal_split(bundle)
 display(pd.DataFrame({name: {'n': len(part.labels), 'positive_rate': part.labels.mean(), 'first': str(part.dates.min()), 'last': str(part.dates.max())} for name, part in splits.items()}).T)
 assert set(splits) == {'train', 'val', 'test'}
@@ -77,7 +90,11 @@ assert all(int(str(date)[:4]) > 1999 for date in splits['test'].dates)"""),
         md("""## 2. 依次训练 Logistic、MLP、CNN
 
 三种模型使用相同的样本和 DataLoader。每个模型单独保存最佳 checkpoint、训练历史和测试预测。"""),
-        code("""loaders = {name: DataLoader(ImageDataset(part), batch_size=PAPER_20D.batch_size, shuffle=name == 'train') for name, part in splits.items()}
+        code("""NUM_WORKERS = min(4, max(1, (os.cpu_count() or 1) // 2))
+LOADER_OPTIONS = {'batch_size': PAPER_20D.batch_size, 'pin_memory': DEVICE.type == 'cuda'}
+if NUM_WORKERS:
+    LOADER_OPTIONS.update({'num_workers': NUM_WORKERS, 'persistent_workers': True, 'prefetch_factor': 2})
+loaders = {name: DataLoader(ImageDataset(part), shuffle=name == 'train', **LOADER_OPTIONS) for name, part in splits.items()}
 factories = {'logistic': LogisticBaseline, 'mlp': MLPBaseline, 'cnn': PriceTrendCNN}
 models, histories, results = {}, {}, {}
 for name, factory in factories.items():
