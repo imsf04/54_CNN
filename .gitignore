@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 artifacts/
 data/
+kaggle_dataset/
 data/raw/*.zip
 data/raw/extracted/
 *.pyc
