@@ -74,6 +74,7 @@ def load_real_data(
     target: str = "Retx_20d_label",
     horizon: str = "20d",
     return_column: str | None = None,
+    max_samples: int | None = None,
 ) -> DataBundle:
     """Load and align one `.dat` image file with one Feather label file."""
 
@@ -109,7 +110,7 @@ def load_real_data(
     target_column = None
     for year in years:
         image_path, label_path = image_files[year], label_files[year]
-        image_bytes = np.fromfile(image_path, dtype=np.uint8)
+        image_bytes = np.memmap(image_path, dtype=np.uint8, mode="r")
         if image_bytes.size % (64 * 60):
             raise ValueError(f"图像文件大小不能整除 64*60: {image_path}")
         images = image_bytes.reshape(-1, 64, 60)
@@ -130,12 +131,16 @@ def load_real_data(
         dates = pd.to_datetime(labels[date_column], errors="coerce")
         valid = y.isin([0, 1]) & dates.notna()
         valid_indices = np.flatnonzero(valid.to_numpy())
-        image_parts.append(images[valid_indices])
-        label_parts.append(y.loc[valid].to_numpy("int64"))
-        date_parts.append(dates.loc[valid].to_numpy())
-        stock_parts.append(labels.loc[valid, stock_column].to_numpy())
+        if max_samples is not None:
+            per_year = max(1, max_samples // len(years))
+            rng = np.random.default_rng(7 + year)
+            valid_indices = rng.choice(valid_indices, size=min(per_year, len(valid_indices)), replace=False)
+        image_parts.append(np.asarray(images[valid_indices]))
+        label_parts.append(y.iloc[valid_indices].to_numpy("int64"))
+        date_parts.append(dates.iloc[valid_indices].to_numpy())
+        stock_parts.append(labels.iloc[valid_indices][stock_column].to_numpy())
         if return_column and return_column in labels.columns:
-            return_parts.append(pd.to_numeric(labels.loc[valid, return_column], errors="coerce").to_numpy("float32"))
+            return_parts.append(pd.to_numeric(labels.iloc[valid_indices][return_column], errors="coerce").to_numpy("float32"))
     if not label_parts or sum(len(part) for part in label_parts) == 0:
         raise ValueError("删除缺失标签后没有有效二分类样本")
     returns = np.concatenate(return_parts) if return_parts and len(return_parts) == len(years) else None

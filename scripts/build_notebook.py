@@ -51,6 +51,7 @@ if not DATA_INPUT.exists():
 OUTPUT_DIR = ROOT / 'artifacts/kaggle_20d'
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MAX_EPOCHS = 100
+MAX_SAMPLES = 120_000  # RAM-safe engineering run
 if any(DATA_INPUT.rglob('*.zip')):
     import zipfile
     DATA_DIR = ROOT / 'data/kaggle_extracted'
@@ -67,7 +68,7 @@ print({'root': str(ROOT), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cud
 确认数据目录包含 `.dat` 和 `.feather`。loader 会检查 64×60 图像、Date、StockID、标签有效性以及 Date + StockID 的缺失/重复；任何错误都会直接停止。"""),
         code("""from price_trends.data import load_real_data, temporal_split
 
-bundle = load_real_data(DATA_DIR, target='Retx_20d_label', horizon='20d', return_column='Retx_20d')
+bundle = load_real_data(DATA_DIR, target='Retx_20d_label', horizon='20d', return_column='Retx_20d', max_samples=MAX_SAMPLES)
 splits = temporal_split(bundle)
 display(pd.DataFrame({name: {'n': len(part.labels), 'positive_rate': part.labels.mean(), 'first': str(part.dates.min()), 'last': str(part.dates.max())} for name, part in splits.items()}).T)
 assert set(splits) == {'train', 'val', 'test'}
