@@ -40,10 +40,20 @@ from price_trends.services.training import fit, set_seed
 
 set_seed(REPRODUCIBILITY_SEED)
 DEVICE = select_device('auto')
-DATA_DIR = Path(os.getenv('PRICE_TRENDS_DATA_DIR', '/kaggle/input/price-trends-20d'))
+DATA_INPUT = Path(os.getenv('PRICE_TRENDS_DATA_DIR', '/kaggle/input/price-trends-20d'))
 OUTPUT_DIR = ROOT / 'artifacts/kaggle_20d'
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 MAX_EPOCHS = 100
+if any(DATA_INPUT.rglob('*.zip')):
+    import zipfile
+    DATA_DIR = ROOT / 'data/kaggle_extracted'
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    archive = next(DATA_INPUT.rglob('*.zip'))
+    if not any(DATA_DIR.rglob('*.dat')):
+        with zipfile.ZipFile(archive) as zipped:
+            zipped.extractall(DATA_DIR)
+else:
+    DATA_DIR = DATA_INPUT
 print({'root': str(ROOT), 'data_dir': str(DATA_DIR), 'device': str(DEVICE), 'cuda': torch.cuda.is_available()})"""),
         md("""## 1. 数据审计与加载
 
