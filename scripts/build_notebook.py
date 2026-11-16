@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 
 import nbformat as nbf
 
@@ -22,10 +23,15 @@ def main() -> None:
 import os
 import sys
 import json
+import subprocess
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
+ROOT = Path('/kaggle/working/54_CNN')
+if not (ROOT / 'src').exists():
+    subprocess.run(['git', 'clone', 'https://github.com/imsf04/54_CNN.git', str(ROOT)], check=True)
+subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-e', str(ROOT)], check=True)
 ROOT = Path.cwd()
 if not (ROOT / 'src').exists():
     ROOT = Path('/kaggle/working/54_CNN') if (Path('/kaggle/working/54_CNN') / 'src').exists() else Path('/content/54_CNN')
