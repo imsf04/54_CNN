@@ -4,5 +4,7 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 artifacts/
+data/raw/*.zip
+data/raw/extracted/
 *.pyc
 **/__pycache__/

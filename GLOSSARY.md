@@ -1,10 +1,10 @@
-# Glossary
+# 术语表
 
-- **20-day image**: A 64×60 image encoding the prior 20 trading days of a stock's price and volume information.
-- **Binary trend label**: The target where 1 means positive subsequent return and 0 means non-positive subsequent return. Missing values are encoded as 2 in the source labels.
-- **Development sample**: Observations dated 1993–1999, used for the 70/30 train/validation split.
-- **Out-of-sample sample**: Observations dated 2000 onward, held out for final evaluation.
-- **PriceTrendCNN**: The three convolution-block baseline model used to classify binary trend labels from 20-day images.
-- **Horizon**: The future-return window used to define a target, evaluated independently for 5-day, 20-day, and 60-day experiments.
-- **Long-short portfolio**: A date-level portfolio that buys the highest predicted-probability group and sells the lowest group.
-- **Grad-CAM**: A class-conditional heatmap showing which spatial regions most influenced a CNN prediction.
+- **20-day 图像**：用前 20 个交易日价格、成交量、移动平均线编码的 64×60 灰度图。
+- **未来收益方向标签**：未来收益为正记为 1，非正记为 0，原始缺失值记为 2。
+- **development 样本**：课程要求的 1993–1999 年样本，用于随机 70/30 train/validation 切分。
+- **out-of-sample 样本**：2000 年及以后样本，只用于最终测试。
+- **PriceTrendCNN**：论文 20-day 规格的三层 CNN，filters 为 64/128/256。
+- **horizon**：未来收益窗口；本课程数据使用 20-day 图像，也提供 5d、20d、60d 未来收益标签。
+- **long-short portfolio**：按预测概率分组，做最高概率组多头、最低概率组空头的日期级组合。
+- **Grad-CAM**：显示最后卷积层对某个类别预测贡献区域的热图。
