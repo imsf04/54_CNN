@@ -40,7 +40,7 @@ uv run python scripts/run_experiments.py \
 
 数据切分结果：2,175 train、933 validation、8,880 out-of-sample test。
 
-## 4. 结果
+## 4. 本地工程验证结果
 
 | Model | Accuracy | ROC-AUC | AP | Cumulative long-short return | Annualized volatility | Sharpe |
 |---|---:|---:|---:|---:|---:|---:|
@@ -50,20 +50,53 @@ uv run python scripts/run_experiments.py \
 
 这些结果来自短训练和小样本工程验证，不能支持论文级性能结论。多空组合未计交易成本，且只有 240 个日期级组合观测。
 
-## 5. 解释与限制
+## 5. Kaggle 全量 20-day 正式运行
+
+Notebook 运行版本：`066e69c`。本次运行使用 lazy memmap 数据管线，将图像按 batch 从本地 staging 盘读取，没有把全部图像物化到 RAM。
+
+### 数据与产物核验
+
+- 有效样本总数：2,181,781；其中原始审计文件共 2,196,994 行，过滤掉无效二分类标签或无效日期后得到有效样本；
+- train / validation / test：482,925 / 206,969 / 1,491,887；
+- 测试预测文件行数：1,491,887；
+- 测试日期：2000-01-31 至 2019-12-31；
+- 测试标签正类比例：0.50587；
+- 预测文件包含 Date、StockID、label、return 以及三个模型的 probability；
+- Kaggle 下载包：`artifacts/kaggle_20d_artifacts.zip`，包含 checkpoint、history、metrics 和测试预测。
+
+### 正式运行指标
+
+| Model | Accuracy | Balanced accuracy | ROC-AUC | AP | Cumulative long-short return | Annualized volatility | Sharpe |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Logistic | 0.5177 | 0.5181 | 0.5262 | 0.5264 | 7.6978 | 0.3019 | 7.7013 |
+| MLP | 0.5184 | 0.5193 | 0.5292 | 0.5285 | 11.7415 | 0.3671 | 7.4859 |
+| CNN | 0.5124 | 0.5143 | 0.5237 | 0.5227 | 3.5442 | 0.2737 | 5.9595 |
+
+三种模型的分类指标都只略高于随机基线，不能据此宣称模型具有稳定预测能力。多空组合指标未计交易成本，且只使用 240 个日期级组合观测；这些结果只能作为课程项目的样本外描述性结果，不能直接解释为可交易策略收益。
+
+### Early stopping 记录
+
+- Logistic：完整 history 26 epochs，最佳 validation loss 在 epoch 24；
+- MLP：完整 history 12 epochs，最佳 validation loss 在 epoch 10；
+- CNN：完整 history 4 epochs，最佳 validation loss 在 epoch 2，随后连续两轮没有改善而停止。
+
+这与项目采用的两轮 early stopping 规则一致。checkpoint 中保存的是最佳状态，而不是停止时的最后状态。DataParallel checkpoint 的 state dict 带有 `module.` 前缀；在不使用 DataParallel 的本地分析代码中加载时，需要先去掉该前缀或先用相同的 DataParallel 包装模型。
+
+## 6. 解释与限制
 
 Grad-CAM 和架构消融入口已实现，但本轮没有把真实样本图和完整消融表作为结论写入报告。下一轮应在固定训练预算下运行 baseline、CNN 深度、滤波器数量和 Grad-CAM 样本分析。
 
 当前结果只能回答“真实数据链路和三模型服务是否可以运行”。不能回答 CNN 是否优于 baseline，也不能证明预测信号具有稳定投资价值。最终实验需要全量 20-day 数据、预先固定的训练预算和独立样本外报告。
 
-## 6. 可复现性
+## 7. 可复现性
 
 - 依赖由 `uv.lock` 固定；
 - 清华源为默认 uv index，阿里源为显式 fallback；
 - 随机种子由训练服务统一设置；
 - 原始数据、checkpoint 和实验产物不提交到 Git；
-- 运行结果保存在 `artifacts/data_audit_20d.json` 和 `artifacts/experiments_20d/results.json`。
+- 本地工程验证结果保存在 `artifacts/data_audit_20d.json` 和 `artifacts/experiments_20d/results.json`；
+- Kaggle 正式运行产物下载为 `artifacts/kaggle_20d_artifacts.zip`，解压目录被 `.gitignore` 排除，不提交原始数据和大模型产物。
 
-## 7. AI 使用说明
+## 8. AI 使用说明
 
 AI 用于代码组织、错误定位、文档整理和可复现实验辅助。数据文件清单、字段审计、模型运行和结果解释由项目成员在本地环境核验。
