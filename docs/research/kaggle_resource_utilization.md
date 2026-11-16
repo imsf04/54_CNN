@@ -1,6 +1,6 @@
 # Kaggle T4 ×2 资源利用与峰值控制研究
 
-> 研究范围：Kaggle Notebook 的 T4 双 GPU 会话，以及本仓库当前的价格趋势图像训练链路。资料只采用 Kaggle、PyTorch、NumPy、NVIDIA 一手文档；本文不修改生产代码。仓库状态观察时间：2026-11-17（Asia/Singapore）。
+> 研究范围：Kaggle Notebook 的 T4 双 GPU 会话，以及本仓库当前的价格趋势图像训练链路。资料只采用 Kaggle、PyTorch、NumPy、NVIDIA 一手文档；本文记录研究结论及其后续落地状态。仓库状态观察时间：2026-11-17（Asia/Singapore）。
 
 ## Goal
 
@@ -23,7 +23,7 @@
 - `DataLoader(num_workers=0)` 在主进程加载；`num_workers>0` 才会使用 worker 子进程。`pin_memory=True` 会把返回 batch 放入 page-locked host memory，PyTorch 文档说明这能加快向 CUDA 设备的复制；`prefetch_factor` 控制每个 worker 预取的 batch 数；`persistent_workers=True` 使 worker 跨 epoch 保持，不必每轮重启：[PyTorch `torch.utils.data`](https://docs.pytorch.org/docs/2.15/data.html)。
 - PyTorch 同一文档警告，多进程 DataLoader 可能让 worker 复制父进程中被访问的 Python 对象，整体 CPU 内存消耗可能随 worker 数近似增长。因此 `num_workers`、`prefetch_factor`、batch size 共同决定 RAM 峰值，不能只看模型显存。
 - NumPy `memmap` 允许只访问大文件的一部分而不把整个文件读入内存，适合将样本索引化后按需切片；它本身不提高 GPU 利用率，随机访问仍可能受磁盘 I/O 限制：[NumPy `memmap`](https://numpy.org/doc/stable/reference/generated/numpy.memmap.html)。
-- 本仓库的现状是：`load_real_data()` 用 `np.memmap` 打开每年 `.dat`，随后 `np.asarray(images[valid_indices])`、`np.concatenate(image_parts)`，`ImageDataset` 又建立 float32 torch tensor；`run_experiments.py` 的 DataLoader 保持默认 `num_workers=0`、未设置 `pin_memory`。这些本地观察分别见 [`src/price_trends/data.py`](../../src/price_trends/data.py) 和 [`scripts/run_experiments.py`](../../scripts/run_experiments.py)。
+- 早期实现的风险是：`load_real_data()` 虽然用 `np.memmap` 打开每年 `.dat`，但随后 `np.asarray(images[valid_indices])`、`np.concatenate(image_parts)`，`ImageDataset` 又建立 float32 torch tensor；这会把样本重新物化到内存。当前实现已增加 `LazyDataBundle` 和按需 `ImageDataset`：只在 worker 首次访问某个年度文件时打开 memmap，并按 batch 读取 64×60 行；full lazy metadata 本地审计得到 2,181,781 个有效样本，首个 128 样本 batch 可正常读取。
 
 ### 两张 GPU、AMP 与利用率观测
 
@@ -53,7 +53,7 @@
 
 ## Next step
 
-本轮已先落地低风险、可回退的输入流水线修复：`load_real_data(max_samples=...)` 在采样工程运行中按年度文件使用最多 4 个受控线程，并先对采样索引排序后读取 memmap，避免单线程随机页访问；正式 Notebook 还会在每次运行前同步仓库到 `origin/main`，把 Kaggle 只读输入 staging 到本地工作盘，并配置有限的 DataLoader worker、prefetch 和 pinned memory。一次本地 120,000 样本加载基准由约 26 秒降至约 4 秒；这只是本机 I/O 基准，不代表 Kaggle 端到端加速。当前 Notebook 额外提供 `DataParallel` 作为双卡即时利用率检查；正式论文级多卡结果仍应使用两进程 DDP，不能把 DataParallel 的吞吐直接写成最终结论。
+下一步是 Kaggle 上运行 full lazy 20d 实验：先确认 staging 完成、`lazy_images=True`、有效样本数约 2.18M，再记录每个模型的实际 epoch、吞吐、峰值 RSS、每卡显存、GPU 利用率和验证指标。若单进程 DataParallel 的端到端 step time 没有改善，再把同一数据入口迁移到两进程 DDP + AMP benchmark；不能仅凭第二张卡有显存占用就宣称加速。
 
 ## Reopen condition
 
