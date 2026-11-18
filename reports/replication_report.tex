@@ -49,7 +49,7 @@ Our answers are precise but less flattering than a leaderboard. Averaged over th
 
 \textbf{Runs.} We train each model three times, with seeds 7, 17, and 27, on the full sample, using one V100 GPU with mixed precision. The CNN runs between 5 and 16 epochs, the MLP 8 to 9, and the linear model 18 to 22; early stopping selects a checkpoint in each case. An earlier single run of the same protocol on a hosted Kaggle GPU serves as an independent repeat and reproduces the same order of magnitude on every metric.
 
-\textbf{Portfolio construction.} For each of the 240 test dates we rank stocks by predicted probability, go long the top decile and short the bottom decile with equal weights, and hold for the 20 trading days until the next cross-section. The portfolio return is the difference between the mean returns of the two legs. Because the cross-sections are monthly, the Sharpe ratio is annualised with 12 periods per year, $\text{SR}=\bar r/\hat\sigma\sqrt{12}$. Annualising a 240-month series with the daily convention of 252 overstates the ratio by $\sqrt{21}\approx4.6$. We also report the top/bottom 20\% portfolio as a sensitivity check, and a cost model in which one-way costs of 5, 10, or 20 basis points are charged on the realised month-to-month turnover.
+\textbf{Portfolio construction.} For each of the 240 test dates we rank stocks by predicted probability, go long the top decile and short the bottom decile with equal weights, and hold for the 20 trading days until the next cross-section. The portfolio return is the difference between the mean returns of the two legs. Because the cross-sections are monthly, the Sharpe ratio is annualised with 12 periods per year, $\text{SR}=\bar r/\hat\sigma\sqrt{12}$; annualising a 240-month series with the daily convention of 252 overstates the ratio by $\sqrt{21}\approx4.6$. The weights on the two legs sum to $+1$ and $-1$, so the book carries gross exposure 2. Turnover is $\tau_t=\tfrac12\sum_i|w_{i,t}-w_{i,t-1}|$, and a one-way cost $c$ in basis points is charged as $2c\,\tau_t$, because each unit of $\tau$ corresponds to two units of traded notional in a two-leg book. We also report the top/bottom 20\% sensitivity.
 
 \section{Question 1: does the image representation add information?}
 
@@ -95,7 +95,7 @@ We therefore answer Q1 with a qualified yes. The convolutional prior adds inform
 
 \section{Question 2: does the ranking become an economically meaningful portfolio?}
 
-Table~\ref{tab:portfolio} reports the top-decile long--short portfolio. Averaged over seeds, the linear model earns the highest Sharpe ratio, 1.94, against 1.70 for the CNN and 1.60 for the MLP; the CNN's seed standard deviation of 0.35 is about twice that of the other two models, and its individual seeds range from 1.46 to 2.10. Averaging the three seeds' probabilities removes part of that variation and gives Sharpe ratios of 1.99 for the linear model, 1.88 for the CNN, and 1.65 for the MLP, with $t$-statistics of 8.90, 8.39, and 7.39, Newey--West $t$-statistics of 7.03, 7.07, and 6.12, and moving-block bootstrap 95\% intervals of $[1.61,2.44]$, $[1.50,2.75]$, and $[1.33,2.43]$. Seed-averaged cumulative gross returns over 240 months are 20.9, 70.9, and 28.7 times.
+Table~\ref{tab:portfolio} reports the top-decile long--short portfolio. Averaged over seeds, the linear model earns the highest Sharpe ratio, 1.94, against 1.70 for the CNN and 1.60 for the MLP; the CNN's seed standard deviation of 0.35 is about twice that of the other two models, and its individual seeds range from 1.46 to 2.10. The CNN's seed-average cumulative gross return, 70.9, hides seeds that end at 17.1, 214.7, and 12.1 times; its median is 17.1, close to the linear model's 17.4. Averaging the three seeds' probabilities removes part of that variation and gives Sharpe ratios of 1.99 for the linear model, 1.88 for the CNN, and 1.65 for the MLP, with $t$-statistics of 8.90, 8.39, and 7.39, Newey--West $t$-statistics of 7.03, 7.07, and 6.12, and moving-block bootstrap 95\% intervals of $[1.61,2.44]$, $[1.50,2.75]$, and $[1.33,2.43]$. Seed-averaged cumulative gross returns over 240 months are 20.9, 70.9, and 28.7 times.
 
 \begin{table}[t]
 \centering
@@ -148,7 +148,7 @@ Economic validity is where the story weakens. Splitting the sample, the monthly 
 \label{fig:costs}
 \end{figure}
 
-Turnover is high: the portfolio replaces about 1.77 times its value each month, so a 10 basis point one-way cost removes roughly 35 basis points of monthly return. This is a structural property of re-ranking a large cross-section every month, and it means the gross Sharpe ratios in Table~\ref{tab:portfolio} are not attainable in practice.
+Turnover is high: $\tau\approx1.77$, so the portfolio replaces roughly 88\% of its gross book each month and a 10 basis point one-way cost removes about 35 basis points of monthly return. This is a structural property of re-ranking a large cross-section every month, and it means the gross Sharpe ratios in Table~\ref{tab:portfolio} are not attainable in practice.
 
 \section{Question 3: a stable shape or a period-specific regularity?}
 
