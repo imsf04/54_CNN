@@ -167,7 +167,7 @@ pd.DataFrame(results).T.to_csv(OUTPUT_DIR / 'all_model_metrics.csv')
 print(f'Saved artifacts to {OUTPUT_DIR}')"""),
         md("""## 4. 结果导出
 
-下载 `artifacts/kaggle_20d/`，把 `all_model_metrics.csv`、`test_predictions.parquet`、训练曲线和 checkpoint 放入本地项目，再更新 `reports/replication_report.md`。不要把原始数据或 checkpoint 提交到 Git。"""),
+下载 `artifacts/kaggle_20d/`，把 `all_model_metrics.csv`、`test_predictions.parquet`、训练曲线和 checkpoint 放入本地项目，再用 `scripts/analyze_predictions.py` 从保存的预测重建十分位组合、换手、交易成本与分时段结果。不要把原始数据或 checkpoint 提交到 Git。"""),
     ]
     notebook = nbf.v4.new_notebook(cells=cells, metadata={'kernelspec': {'display_name': 'Python 3', 'language': 'python', 'name': 'python3'}})
     path = Path('notebooks/price_trends_replication.ipynb')

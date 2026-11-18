@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from .adapters.data_source import resolve_data_dir
 from .domain import DataBundle, LazyDataBundle, SplitBundle
@@ -317,4 +317,67 @@ class ImageDataset(Dataset):
         return (torch.from_numpy(image[None]) - self.mean) / self.std, self.y[index]
 
 
-__all__ = ["DataBundle", "ImageDataset", "LazyDataBundle", "SplitBundle", "image_pixel_stats", "load_real_data", "make_synthetic_data", "temporal_split"]
+class IterableImageDataset(IterableDataset):
+    """Yield normalized image batches straight from the per-year memmaps."""
+
+    def __init__(
+        self,
+        bundle: LazyDataBundle,
+        *,
+        batch_size: int,
+        mean: float,
+        std: float,
+        shuffle: bool = False,
+        seed: int = 0,
+    ) -> None:
+        if not np.isfinite(mean) or not np.isfinite(std) or std <= 0:
+            raise ValueError("image normalization requires finite mean and positive std")
+        self.bundle = bundle
+        self.batch_size = batch_size
+        self.mean = float(mean)
+        self.std = float(std)
+        self.shuffle = shuffle
+        self.rng = np.random.default_rng(seed)
+        self._maps: dict[int, np.memmap] = {}
+
+    def __len__(self) -> int:
+        return -(-len(self.bundle.labels) // self.batch_size)
+
+    def _image_map(self, file_id: int) -> np.memmap:
+        if file_id not in self._maps:
+            self._maps[file_id] = np.memmap(
+                self.bundle.image_paths[file_id],
+                dtype=np.uint8,
+                mode="r",
+                shape=(self.bundle.image_counts[file_id], 64, 60),
+            )
+        return self._maps[file_id]
+
+    def __iter__(self):
+        total = len(self.bundle.labels)
+        order = self.rng.permutation(total) if self.shuffle else np.arange(total)
+        for start in range(0, total, self.batch_size):
+            indices = order[start : start + self.batch_size]
+            file_ids = self.bundle.file_ids[indices]
+            rows = self.bundle.row_indices[indices]
+            images = np.empty((len(indices), 64, 60), dtype="float32")
+            for file_id in np.unique(file_ids):
+                selected = file_ids == file_id
+                images[selected] = self._image_map(int(file_id))[rows[selected]]
+            images /= 255.0
+            x = (torch.from_numpy(images).unsqueeze(1) - self.mean) / self.std
+            y = torch.from_numpy(self.bundle.labels[indices].astype("int64"))
+            yield x, y
+
+
+__all__ = [
+    "DataBundle",
+    "ImageDataset",
+    "IterableImageDataset",
+    "LazyDataBundle",
+    "SplitBundle",
+    "image_pixel_stats",
+    "load_real_data",
+    "make_synthetic_data",
+    "temporal_split",
+]

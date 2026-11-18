@@ -38,9 +38,13 @@ def long_short_metrics(
     returns: np.ndarray,
     dates: np.ndarray,
     quantile: float = 0.2,
-    periods_per_year: int = 252,
+    periods_per_year: float = 12,
 ) -> dict[str, float]:
-    """Evaluate the paper-style date-level top-minus-bottom portfolio."""
+    """Evaluate the paper-style date-level top-minus-bottom portfolio.
+
+    The course data has one cross-section per month, each holding the 20-day
+    forward return, so the default annualization unit is twelve periods.
+    """
 
     p, r, d = np.asarray(probabilities), np.asarray(returns, dtype=float), np.asarray(dates)
     if not (len(p) == len(r) == len(d)):

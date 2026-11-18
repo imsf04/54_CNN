@@ -25,22 +25,26 @@ def run_epoch(
     loader: DataLoader,
     optimizer: torch.optim.Optimizer | None = None,
     device: torch.device | str = "cpu",
+    amp: bool = False,
 ) -> dict[str, float]:
     training = optimizer is not None
     model.train(training)
     loss_fn = nn.CrossEntropyLoss()
+    scaler = torch.amp.GradScaler("cuda", enabled=amp)
     total_loss = 0.0
     correct = 0
     count = 0
     for x, y in loader:
-        x, y = x.to(device), y.to(device)
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         if training:
             optimizer.zero_grad(set_to_none=True)
-        logits = model(x)
-        loss = loss_fn(logits, y)
+        with torch.autocast("cuda", dtype=torch.float16, enabled=amp):
+            logits = model(x)
+            loss = loss_fn(logits, y)
         if training:
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
         total_loss += loss.item() * len(y)
         correct += int((logits.argmax(1) == y).sum())
         count += len(y)
@@ -57,6 +61,7 @@ def fit(
     patience: int = PAPER_20D.early_stopping_patience,
     device: torch.device | str = "cpu",
     checkpoint: str | Path | None = None,
+    amp: bool = False,
 ) -> list[dict[str, object]]:
     """Train with the paper's Adam/lr and two-epoch early stopping rule."""
 
@@ -67,8 +72,8 @@ def fit(
     stale_epochs = 0
     history: list[dict[str, object]] = []
     for epoch in range(1, epochs + 1):
-        train_metrics = run_epoch(model, train_loader, optimizer, device)
-        val_metrics = run_epoch(model, val_loader, None, device)
+        train_metrics = run_epoch(model, train_loader, optimizer, device, amp=amp)
+        val_metrics = run_epoch(model, val_loader, None, device, amp=amp)
         row = {"epoch": epoch, "train": train_metrics, "val": val_metrics}
         history.append(row)
         if val_metrics["loss"] < best_loss:

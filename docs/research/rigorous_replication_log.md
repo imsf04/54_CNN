@@ -38,3 +38,14 @@
 ## Remote preflight observation — 2026-11-18
 
 Read-only SSH check of `10.10.20.20` found both GPUs occupied: GPU 0 at 95% utilization with 25,408 MiB used, GPU 1 at 1% with 9,832 MiB used. Other users had active sessions. The host shell did not expose `python` on PATH. Formal training was not started.
+
+## 全量 20-day 运行 — 2026-11-18
+
+- 单次全量运行：Kaggle kernel `imsfp04/price-trends-rigorous-20-day-replication`，revision `01eb696`，2,181,781 个样本，train/validation/test 为 482,925/206,969/1,491,887；训练集 mean `0.10689710380321306`，std `0.3089823829956947`；产物在 `artifacts/kaggle_output_1118/`。
+- 三 seed 全量运行：V100 上执行 `scripts/run_full_experiments.py --seeds 7 17 27 --epochs 100`，混合精度、lazy memmap 读取；产物在 `artifacts/full_seeds/`，三个 seed 的测试预测用于逐 seed 与概率平均的汇总。
+- 年化口径：课程横截面为月度（240 个日期观测，每期持有 20 个交易日的收益），`long_short_metrics` 默认 `periods_per_year=12`；按 252 计算的旧数字不再引用。
+- 三 seed 结果（mean±sd）：Logistic AUC `0.5251±0.0008`、Sharpe `1.94±0.18`；MLP AUC `0.5275±0.0009`、Sharpe `1.60±0.12`；CNN AUC `0.5300±0.0038`、Sharpe `1.70±0.35`。三个 seed 概率平均后的 Sharpe 为 1.99/1.65/1.88，扣除 10 bps 成本为 1.46/1.29/1.51。
+- 判断：CNN 的 AUC 优势只有 0.0025–0.0049，小于自身 seed 标准差 0.0038；组合 Sharpe 的 seed 标准差 0.35 约为其他模型两倍，单次全量运行的 CNN 高收益不能作为结论。
+- 分时段：三个模型在 2013–2019 都衰减，AUC 0.511–0.516，月均组合收益 0.45–0.65%。
+- 全量架构消融未完成：每个 run 约 20 分钟，15 个 run 超出本次租期；报告保留 12,000 样本 4 epoch 三 seed 消融，并注明预算限制。
+- 决定：报告以三 seed 均值与 seed 平均后的组合为主，单次 Kaggle 运行只作为独立重复；Grad-CAM 与遮挡实验使用该单次运行的 checkpoint。

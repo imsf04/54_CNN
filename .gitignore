@@ -10,3 +10,6 @@ data/raw/*.zip
 data/raw/extracted/
 *.pyc
 **/__pycache__/
+reports/*.aux
+reports/*.log
+reports/*.out

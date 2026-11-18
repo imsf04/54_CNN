@@ -13,7 +13,7 @@ src/price_trends/
 notebooks/        中文复现 Notebook
 scripts/          下载、实验、Notebook 生成
 docs/references/  论文 PDF、文本和参数来源
-reports/          中文报告框架
+reports/          LaTeX 报告、图表与 PDF
 data/raw/         下载的原始压缩包与解压文件（不提交 Git）
 ```
 
@@ -62,7 +62,7 @@ uv run python scripts/build_notebook.py
 jupyter notebook notebooks/price_trends_replication.ipynb
 ```
 
-Notebook 用中文 Markdown 组织数据检查、训练、out-of-sample 指标、训练曲线、Grad-CAM 和架构消融。报告骨架在 [reports/replication_report.md](reports/replication_report.md)，参数出处在 [docs/references/README.md](docs/references/README.md)。
+Notebook 用中文 Markdown 组织数据检查、训练、样本外指标、训练曲线，并保存测试集预测。报告在 [reports/replication_report.tex](reports/replication_report.tex)，编译产物为 reports/replication_report.pdf；十分位组合、换手、成本、分时段与遮挡结果由 scripts/analyze_predictions.py、scripts/analyze_seeds.py 与 scripts/occlusion_test.py 从保存的预测重建。参数出处在 [docs/references/README.md](docs/references/README.md)。
 
 ## 检查
 
