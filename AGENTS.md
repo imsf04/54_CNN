@@ -4,6 +4,10 @@
 
 Issues and specifications live in GitHub Issues for `imsf04/54_CNN`. See `docs/agents/issue-tracker.md`.
 
+### Triage labels
+
+This repository uses the default five triage labels. See `docs/agents/triage-labels.md`.
+
 ### Domain docs
 
 This is a single-context repository. See `docs/agents/domain.md`.

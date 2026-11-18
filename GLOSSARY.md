@@ -7,4 +7,6 @@
 - **PriceTrendCNN**：论文 20-day 规格的三层 CNN，filters 为 64/128/256。
 - **horizon**：未来收益窗口；本课程数据使用 20-day 图像，也提供 5d、20d、60d 未来收益标签。
 - **long-short portfolio**：按预测概率分组，做最高概率组多头、最低概率组空头的日期级组合。
+- **decile long-short portfolio**：按每个日期的预测概率排序，取最高 10% 与最低 10% 形成的等权多空组合。
+- **训练集标准化统计量**：仅由 development 中的 train split 计算的像素 mean/std，并固定应用于 validation 和 out-of-sample。
 - **Grad-CAM**：显示最后卷积层对某个类别预测贡献区域的热图。

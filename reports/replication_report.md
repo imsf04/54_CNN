@@ -84,11 +84,44 @@ Notebook 运行版本：`066e69c`。本次运行使用 lazy memmap 数据管线�
 
 ## 6. 解释与限制
 
-Grad-CAM 和架构消融入口已实现，但本轮没有把真实样本图和完整消融表作为结论写入报告。下一轮应在固定训练预算下运行 baseline、CNN 深度、滤波器数量和 Grad-CAM 样本分析。
+初次全量运行时，Grad-CAM 和架构消融入口虽已实现，但没有把真实样本图和完整消融表写入报告；本地固定预算检查见下一节。
 
 当前结果只能回答“真实数据链路和三模型服务是否可以运行”。不能回答 CNN 是否优于 baseline，也不能证明预测信号具有稳定投资价值。最终实验需要全量 20-day 数据、预先固定的训练预算和独立样本外报告。
 
-## 7. 可复现性
+## 7. 本地固定预算消融与 Grad-CAM
+
+在关闭 Kaggle 远端后，先用本地真实数据做固定预算检查。实验命令为：
+
+```bash
+uv run python scripts/run_local_ablations.py \
+  --data-dir data/raw/extracted \
+  --output artifacts/local_ablations_normalized_v2 \
+  --max-samples 12000 \
+  --epochs 4 \
+  --seeds 7,17,27 \
+  --device cpu
+```
+
+所有配置使用同一个年度均衡样本上限、同一个时间切分、batch size 128 和 4 个完整 epoch；patience 设为 5，避免早停造成预算不一致。使用 seeds 7、17、27，并保存每个 seed 的原始结果和 checkpoint。训练集像素统计量为 mean=0.107225、std=0.309399，只由 train split 计算，再固定应用到 validation/test。数据切分为 2,175 train、933 validation、8,880 test。
+
+| Configuration | ROC-AUC mean ± sd | AP mean ± sd | Decile Sharpe mean ± sd | Top/bottom 20% Sharpe mean |
+|---|---:|---:|---:|---:|
+| Logistic baseline | 0.5041 ± 0.0035 | 0.5094 ± 0.0030 | 0.9840 ± 1.2791 | 0.8028 |
+| CNN, 2 blocks (64,128) | 0.4924 ± 0.0077 | 0.5001 ± 0.0044 | -0.9758 ± 0.7069 | -0.0648 |
+| CNN, 3 blocks (64,128,256) | 0.4933 ± 0.0090 | 0.4990 ± 0.0066 | 0.7379 ± 1.3619 | 0.7430 |
+| CNN, 4 blocks (64,128,256,512) | 0.4942 ± 0.0046 | 0.5005 ± 0.0026 | 0.6663 ± 0.7165 | 0.2387 |
+| CNN narrow (32,64,128) | 0.5001 ± 0.0077 | 0.5037 ± 0.0064 | -0.2460 ± 0.1009 | 0.1176 |
+| CNN wide (128,256,512) | **0.5083 ± 0.0090** | **0.5125 ± 0.0088** | 0.0504 ± 0.9836 | 0.5366 |
+
+3 个 seed 的短预算结果仍然接近随机分类基线，且不同架构的 Sharpe 波动较大；不能据此宣称 CNN 优于 Logistic，也不能把未计成本的组合收益解释为稳定投资价值。组合主指标现在是每个日期 top/bottom 10% 的等权 decile long-short，top/bottom 20% 仅作敏感性分析。
+
+评估器要求每个日期至少有 10 个有效资产，否则直接失败；这避免在小样本 smoke run 中把不完整的 decile 组合误当成正式结果。
+
+Grad-CAM 按预先声明的固定模型（`cnn_3blocks`, seed 7）生成固定 16 张样本：TP、TN、FP、FN 各 4 张，并保存逐样本日期、股票、标签、概率和预测类别。模型选择不使用测试集指标。网格图为 `artifacts/local_ablations_normalized_v2/gradcam_16_samples.png`，metadata 为 `gradcam_examples.json`。这仍然是定性解释，不是因果证据。
+
+原始 JSON、CSV、checkpoint、Grad-CAM metadata 和图像均保存在 `artifacts/local_ablations_normalized_v2/`，便于后续 GPU 实验复核。
+
+## 8. 可复现性
 
 - 依赖由 `uv.lock` 固定；
 - 清华源为默认 uv index，阿里源为显式 fallback；
@@ -97,6 +130,6 @@ Grad-CAM 和架构消融入口已实现，但本轮没有把真实样本图和�
 - 本地工程验证结果保存在 `artifacts/data_audit_20d.json` 和 `artifacts/experiments_20d/results.json`；
 - Kaggle 正式运行产物下载为 `artifacts/kaggle_20d_artifacts.zip`，解压目录被 `.gitignore` 排除，不提交原始数据和大模型产物。
 
-## 8. AI 使用说明
+## 9. AI 使用说明
 
 AI 用于代码组织、错误定位、文档整理和可复现实验辅助。数据文件清单、字段审计、模型运行和结果解释由项目成员在本地环境核验。

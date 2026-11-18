@@ -31,14 +31,17 @@ from torch.utils.data import DataLoader
 WORKSPACE = Path('/kaggle/working') if Path('/kaggle/working').exists() else Path('/content')
 ROOT = WORKSPACE / '54_CNN'
 REPO_URL = 'https://github.com/imsf04/54_CNN.git'
+REPO_REF = 'stevenPeng/kaggle-rigorous-replication'
 if (ROOT / '.git').exists():
-    subprocess.run(['git', '-C', str(ROOT), 'fetch', 'origin', 'main'], check=True)
-    subprocess.run(['git', '-C', str(ROOT), 'reset', '--hard', 'origin/main'], check=True)
+    subprocess.run(['git', '-C', str(ROOT), 'fetch', 'origin', REPO_REF], check=True)
+    subprocess.run(['git', '-C', str(ROOT), 'reset', '--hard', f'origin/{REPO_REF}'], check=True)
 elif ROOT.exists():
     shutil.rmtree(ROOT)
     subprocess.run(['git', 'clone', REPO_URL, str(ROOT)], check=True)
 else:
     subprocess.run(['git', 'clone', REPO_URL, str(ROOT)], check=True)
+subprocess.run(['git', '-C', str(ROOT), 'fetch', 'origin', REPO_REF], check=True)
+subprocess.run(['git', '-C', str(ROOT), 'reset', '--hard', f'origin/{REPO_REF}'], check=True)
 subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '-e', str(ROOT)], check=True)
 sys.path.insert(0, str(ROOT / 'src'))
 
@@ -111,7 +114,7 @@ print({'root': str(ROOT), 'revision': subprocess.check_output(['git', '-C', str(
         md("""## 1. 数据审计与加载
 
 确认数据目录包含 `.dat` 和 `.feather`。loader 会检查 64×60 图像、Date、StockID、标签有效性以及 Date + StockID 的缺失/重复；任何错误都会直接停止。"""),
-        code("""from price_trends.data import load_real_data, temporal_split
+        code("""from price_trends.data import ImageDataset, image_pixel_stats, load_real_data, temporal_split
 
 sample_message = f'{MAX_SAMPLES:,}' if MAX_SAMPLES is not None else 'all available'
 print(f'Loading {sample_message} samples with lazy memmap batches ...')
@@ -129,7 +132,10 @@ assert all(int(str(date)[:4]) > 1999 for date in splits['test'].dates)"""),
 LOADER_OPTIONS = {'batch_size': PAPER_20D.batch_size, 'pin_memory': DEVICE.type == 'cuda'}
 if NUM_WORKERS:
     LOADER_OPTIONS.update({'num_workers': NUM_WORKERS, 'persistent_workers': True, 'prefetch_factor': 2})
-loaders = {name: DataLoader(ImageDataset(part), shuffle=name == 'train', **LOADER_OPTIONS) for name, part in splits.items()}
+normalization_mean, normalization_std = image_pixel_stats(ImageDataset(splits['train']), batch_size=PAPER_20D.batch_size)
+datasets = {name: ImageDataset(part, mean=normalization_mean, std=normalization_std) for name, part in splits.items()}
+print({'normalization_mean': normalization_mean, 'normalization_std': normalization_std, 'source': 'train split only'})
+loaders = {name: DataLoader(dataset, shuffle=name == 'train', **LOADER_OPTIONS) for name, dataset in datasets.items()}
 factories = {'logistic': LogisticBaseline, 'mlp': MLPBaseline, 'cnn': PriceTrendCNN}
 MULTI_GPU = DEVICE.type == 'cuda' and torch.cuda.device_count() > 1
 GPU_IDS = list(range(torch.cuda.device_count())) if MULTI_GPU else []

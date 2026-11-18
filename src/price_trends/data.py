@@ -9,7 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 
 from .adapters.data_source import resolve_data_dir
 from .domain import DataBundle, LazyDataBundle, SplitBundle
@@ -26,19 +26,6 @@ def make_synthetic_data(n: int = 32, seed: int = REPRODUCIBILITY_SEED) -> DataBu
     years = np.resize(np.array([1993, 1994, 1995, 2000]), n)
     dates = np.array([f"{year}-01-15" for year in years], dtype="datetime64[D]")
     return DataBundle(images, labels, dates)
-
-
-def _find_file(root: Path, suffix: str, horizon: str) -> Path:
-    files = sorted(
-        path
-        for path in root.rglob(f"*{suffix}")
-        if "__MACOSX" not in path.parts and not path.name.startswith("._")
-    )
-    if not files:
-        raise FileNotFoundError(f"未找到 {suffix} 文件: {root}")
-    horizon_lower = horizon.lower().replace("-", "")
-    matching = [path for path in files if horizon_lower in path.name.lower().replace("-", "")]
-    return matching[0] if matching else files[0]
 
 
 def _year_from_name(path: Path) -> int | None:
@@ -73,6 +60,8 @@ def _target_column(frame, target: str) -> str:
 
 def _discover_pairs(root: Path, horizon: str) -> tuple[dict[int, Path], dict[int, Path], list[int]]:
     horizon_key = horizon.replace("-", "").lower()
+    all_images = sorted(path for path in root.rglob("*.dat") if "__MACOSX" not in path.parts and not path.name.startswith("._"))
+    all_labels = sorted(path for path in root.rglob("*.feather") if "__MACOSX" not in path.parts and not path.name.startswith("._"))
     image_files = {
         year: path
         for path in root.rglob("*.dat")
@@ -88,9 +77,10 @@ def _discover_pairs(root: Path, horizon: str) -> tuple[dict[int, Path], dict[int
         if year is not None and horizon_key in path.name.lower().replace("-", "")
     }
     if not image_files or not label_files:
-        image_path = _find_file(root, ".dat", horizon)
-        label_path = _find_file(root, ".feather", horizon)
-        image_files, label_files = {0: image_path}, {0: label_path}
+        has_year_named_files = any(_year_from_name(path) is not None for path in all_images + all_labels)
+        if has_year_named_files or len(all_images) != 1 or len(all_labels) != 1:
+            raise FileNotFoundError(f"未找到 horizon={horizon!r} 的成对图像和标签文件: {root}")
+        image_files, label_files = {0: all_images[0]}, {0: all_labels[0]}
     years = sorted(set(image_files) & set(label_files))
     if not years:
         raise ValueError("没有找到可配对的年度图像和标签文件")
@@ -260,9 +250,43 @@ def temporal_split(
     return {"train": take(development[:cut]), "val": take(development[cut:]), "test": take(test)}
 
 
+def image_pixel_stats(dataset: Dataset, batch_size: int = 128) -> tuple[float, float]:
+    """Compute mean and population std from already scaled training images only."""
+
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    total = 0
+    total_sum = 0.0
+    total_squared_sum = 0.0
+    for images, _ in loader:
+        values = images.to(dtype=torch.float64)
+        total += values.numel()
+        total_sum += float(values.sum())
+        total_squared_sum += float((values * values).sum())
+    if total == 0:
+        raise ValueError("cannot compute image statistics from an empty dataset")
+    mean = total_sum / total
+    variance = total_squared_sum / total - mean * mean
+    if variance < 0:
+        raise ValueError(f"training image variance is negative: {variance}")
+    std = variance**0.5
+    if std <= 0:
+        raise ValueError("training images have zero pixel variance")
+    return mean, std
+
+
 class ImageDataset(Dataset):
-    def __init__(self, bundle: DataBundle | LazyDataBundle) -> None:
+    def __init__(
+        self,
+        bundle: DataBundle | LazyDataBundle,
+        *,
+        mean: float = 0.0,
+        std: float = 1.0,
+    ) -> None:
+        if not np.isfinite(mean) or not np.isfinite(std) or std <= 0:
+            raise ValueError("image normalization requires finite mean and positive std")
         self.y = torch.from_numpy(bundle.labels.astype("int64"))
+        self.mean = float(mean)
+        self.std = float(std)
         self.x = None
         self._maps: dict[int, np.memmap] = {}
         self._bundle = bundle
@@ -270,7 +294,7 @@ class ImageDataset(Dataset):
             images = bundle.images.astype("float32")
             if images.size and images.max() > 1:
                 images /= 255.0
-            self.x = torch.from_numpy(images)[:, None]
+            self.x = (torch.from_numpy(images)[:, None] - self.mean) / self.std
 
     def __len__(self) -> int:
         return len(self.y)
@@ -290,7 +314,7 @@ class ImageDataset(Dataset):
             )
             self._maps[file_id] = image_map
         image = np.asarray(image_map[int(bundle.row_indices[index])], dtype="float32") / 255.0
-        return torch.from_numpy(image[None]), self.y[index]
+        return (torch.from_numpy(image[None]) - self.mean) / self.std, self.y[index]
 
 
-__all__ = ["DataBundle", "ImageDataset", "LazyDataBundle", "SplitBundle", "load_real_data", "make_synthetic_data", "temporal_split"]
+__all__ = ["DataBundle", "ImageDataset", "LazyDataBundle", "SplitBundle", "image_pixel_stats", "load_real_data", "make_synthetic_data", "temporal_split"]

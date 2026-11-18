@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
 
-from price_trends.data import ImageDataset, load_real_data, make_synthetic_data, temporal_split
+from price_trends.data import (
+    ImageDataset,
+    image_pixel_stats,
+    load_real_data,
+    make_synthetic_data,
+    temporal_split,
+)
 from price_trends.models import PriceTrendCNN
-from price_trends.services.evaluation import classification_metrics
+from price_trends.services.evaluation import classification_metrics, long_short_metrics
 from price_trends.services.interpretation import grad_cam
 
 
@@ -66,3 +73,23 @@ def test_grad_cam_returns_normalized_map() -> None:
     assert heatmap.ndim == 2
     assert float(heatmap.detach().min()) >= 0
     assert float(heatmap.detach().max()) <= 1
+
+
+def test_image_stats_are_applied_after_byte_scaling() -> None:
+    bundle = make_synthetic_data(4)
+    dataset = ImageDataset(bundle)
+    mean, std = image_pixel_stats(dataset, batch_size=2)
+    normalized = ImageDataset(bundle, mean=mean, std=std)
+    values = torch.stack([normalized[index][0] for index in range(len(normalized))])
+    assert abs(float(values.mean())) < 1e-5
+    assert abs(float(values.std(unbiased=False)) - 1.0) < 1e-5
+
+
+def test_decile_portfolio_rejects_sparse_cross_sections() -> None:
+    with pytest.raises(ValueError, match="too few assets"):
+        long_short_metrics(
+            np.array([0.1, 0.2, 0.8, 0.9]),
+            np.array([0.01, 0.02, -0.01, 0.03]),
+            np.array(["2000-01-31"] * 4),
+            quantile=0.1,
+        )

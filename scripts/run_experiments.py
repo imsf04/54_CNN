@@ -14,7 +14,13 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from torch.utils.data import DataLoader
 
 from price_trends.adapters.runtime import select_device
-from price_trends.data import DataBundle, ImageDataset, load_real_data, temporal_split
+from price_trends.data import (
+    DataBundle,
+    ImageDataset,
+    image_pixel_stats,
+    load_real_data,
+    temporal_split,
+)
 from price_trends.models import LogisticBaseline, MLPBaseline, PriceTrendCNN
 from price_trends.references import PAPER_20D, REPRODUCIBILITY_SEED
 from price_trends.services.evaluation import evaluate_model
@@ -60,13 +66,11 @@ def run_one(
     if max_samples is not None:
         bundle = _limit_for_check(bundle, max_samples)
     splits = temporal_split(bundle)
+    mean, std = image_pixel_stats(ImageDataset(splits["train"]), batch_size=PAPER_20D.batch_size)
+    datasets = {name: ImageDataset(split, mean=mean, std=std) for name, split in splits.items()}
     loaders = {
-        name: DataLoader(
-            ImageDataset(split),
-            batch_size=PAPER_20D.batch_size,
-            shuffle=name == "train",
-        )
-        for name, split in splits.items()
+        name: DataLoader(dataset, batch_size=PAPER_20D.batch_size, shuffle=name == "train")
+        for name, dataset in datasets.items()
     }
     factories = {"logistic": LogisticBaseline, "mlp": MLPBaseline, "cnn": PriceTrendCNN}
     runs = {}
@@ -81,6 +85,7 @@ def run_one(
         "n_train": len(splits["train"].labels),
         "n_val": len(splits["val"].labels),
         "n_test": len(splits["test"].labels),
+        "normalization": {"mean": mean, "std": std, "source": "train split only"},
         "device": str(device),
     }
 

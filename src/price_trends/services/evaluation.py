@@ -43,13 +43,17 @@ def long_short_metrics(
     """Evaluate the paper-style date-level top-minus-bottom portfolio."""
 
     p, r, d = np.asarray(probabilities), np.asarray(returns, dtype=float), np.asarray(dates)
+    if not (len(p) == len(r) == len(d)):
+        raise ValueError("probabilities, returns, and dates must have equal lengths")
+    if not 0 < quantile <= 0.5:
+        raise ValueError("quantile must be in (0, 0.5]")
     valid = np.isfinite(p) & np.isfinite(r)
     p, r, d = p[valid], r[valid], d[valid]
     daily: list[float] = []
     for date in np.unique(d):
         indices = np.flatnonzero(d == date)
-        if len(indices) < 4:
-            continue
+        if len(indices) < max(10, int(np.ceil(1 / quantile))):
+            raise ValueError(f"date {date!s} has too few assets for a {quantile:.0%} portfolio")
         order = indices[np.argsort(p[indices])]
         n = max(1, int(len(order) * quantile))
         daily.append(float(r[order[-n:]].mean() - r[order[:n]].mean()))
@@ -69,5 +73,6 @@ def evaluate_model(model, bundle: DataBundle, loader: DataLoader, device: str = 
     probabilities = predict_proba(model, loader, device)
     result = classification_metrics(bundle.labels, probabilities)
     if bundle.returns is not None:
-        result.update({f"portfolio_{k}": v for k, v in long_short_metrics(probabilities, bundle.returns, bundle.dates).items()})
+        result.update({f"portfolio_{k}": v for k, v in long_short_metrics(probabilities, bundle.returns, bundle.dates, quantile=0.1).items()})
+        result.update({f"portfolio_20pct_{k}": v for k, v in long_short_metrics(probabilities, bundle.returns, bundle.dates, quantile=0.2).items()})
     return result
