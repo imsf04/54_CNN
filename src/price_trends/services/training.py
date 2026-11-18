@@ -98,5 +98,5 @@ def predict_proba(model: nn.Module, loader: DataLoader, device: torch.device | s
     model.eval()
     probabilities: list[np.ndarray] = []
     for x, _ in loader:
-        probabilities.append(torch.softmax(model(x.to(device)), dim=1)[:, 1].cpu().numpy())
+        probabilities.append(torch.softmax(model(x.to(device, non_blocking=True)), dim=1)[:, 1].cpu().numpy())
     return np.concatenate(probabilities) if probabilities else np.empty(0, dtype="float32")

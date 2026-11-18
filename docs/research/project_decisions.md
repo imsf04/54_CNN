@@ -20,12 +20,13 @@
 ## 实验
 
 - 主实验：seeds 7/17/27 × logistic/mlp/cnn，全量数据，V100，fp16 混合精度，early stopping 依据验证集损失。
-- 架构消融：12,000 样本、4 epoch、三 seed，用于验证协议与筛查；每个配置的训练预算相同。
-- 全量架构消融：15 个 run，完成 1 个后停止，未进入报告。
+- 架构筛查：12,000 样本、4 epoch、三 seed，定位是吞吐与训练协议验收（profile 预算），不作为统计结论；每个配置的训练预算相同。
+- 全量架构消融：15 个 run（5 个配置 × 3 个 seed），每个 8 epoch、训练 batch 128、评估 batch 1024，运行记录在 `/root/autodl-tmp/runs/20261119-0047-full-ablations/`。
+- 吞吐：训练保持 batch 128（论文协议），batch 128 时 GPU 利用率中位 59–69%，bottleneck 是小模型的每步固定开销，不是数据加载；评估用 batch 1024（与 128 的概率差为浮点舍入级）。测量见 `docs/research/training_profile.md`。
 - 解释：Grad-CAM 与遮挡实验使用单次全量运行的 CNN checkpoint；5d/60d 不做，课程数据只提供 20-day 标签。
 
 ## 未决事项
 
 - 视频链接（PENG You）。
 - 团队贡献说明。
-- 全量架构消融剩余 13 个 run，按当前速度约一小时。
+- 全量架构消融结果并写入报告。

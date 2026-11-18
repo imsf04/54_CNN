@@ -47,5 +47,13 @@ Read-only SSH check of `10.10.20.20` found both GPUs occupied: GPU 0 at 95% util
 - 三 seed 结果（mean±sd）：Logistic AUC `0.5251±0.0008`、Sharpe `1.94±0.18`；MLP AUC `0.5275±0.0009`、Sharpe `1.60±0.12`；CNN AUC `0.5300±0.0038`、Sharpe `1.70±0.35`。三个 seed 概率平均后的 Sharpe 为 1.99/1.65/1.88，扣除 10 bps 成本为 1.46/1.29/1.51。
 - 判断：CNN 的 AUC 优势只有 0.0025–0.0049，小于自身 seed 标准差 0.0038；组合 Sharpe 的 seed 标准差 0.35 约为其他模型两倍，单次全量运行的 CNN 高收益不能作为结论。
 - 分时段：三个模型在 2013–2019 都衰减，AUC 0.511–0.516，月均组合收益 0.45–0.65%。
-- 全量架构消融未完成：每个 run 约 20 分钟，15 个 run 超出本次租期；报告保留 12,000 样本 4 epoch 三 seed 消融，并注明预算限制。
+- 全量架构消融：15 个 run（5 个配置 × 3 个 seed），每个 8 epoch、训练 batch 128、评估 batch 1024，预计 8–11 分钟/run；运行记录在 `/root/autodl-tmp/runs/20261119-0047-full-ablations/`。此前按 20 分钟/run 估算并中止的判断有误，主实验实测约 4 分钟/run。
 - 决定：报告以三 seed 均值与 seed 平均后的组合为主，单次 Kaggle 运行只作为独立重复；Grad-CAM 与遮挡实验使用该单次运行的 checkpoint。
+
+## 训练吞吐剖析 — 2026-11-19
+
+- 环境与数据：V100-32GB、驱动 580.65.06、torch 2.8.0+cu128；482,925 训练 / 206,969 验证 / 1,491,887 测试样本。
+- 生产管线（`IterableImageDataset` + `DataLoader(batch_size=None)`，AMP）在 batch 128 下为 9,560–10,332 samples/s、12.4–13.4 ms/step，GPU 利用率中位 59–69%，loader 等待中位 2.0 ms，约占每步 16%。
+- batch 256/512/1024 吞吐为 12,740/13,099/13,572 samples/s，利用率升到 79–81%；channels-last 10,909、`torch.compile` 10,621，与 baseline 的差异在测量噪声内。
+- 评估 batch 128 fp32 为 18.0 秒/20.7 万行，batch 1024 为 10.2 秒；两者概率最大差 `1.10e-06`、平均 `1.43e-07`。
+- 决定：训练保持 batch 128（论文协议），评估使用 batch 1024；12,000 样本/4 epoch 的定位是吞吐与协议验收预算，不作为统计结论。详见 `docs/research/training_profile.md` 与 `artifacts/training_profile.json`。

@@ -57,7 +57,9 @@ def write_results(output: Path, seeds, mean, std, args, results: list[dict[str, 
     (output / "results.json").write_text(
         json.dumps(
             {
-                "seeds": list(seeds),
+                "seeds_requested": list(seeds),
+                "seeds_completed": sorted({int(item["seed"]) for item in results}),
+                "eval_batch_size": args.eval_batch_size,
                 "normalization_mean": mean,
                 "normalization_std": std,
                 "normalization_source": "train split only",
@@ -70,6 +72,16 @@ def write_results(output: Path, seeds, mean, std, args, results: list[dict[str, 
     )
 
 
+def normalization_stats(splits, batch_size: int, cache: Path | None) -> tuple[float, float]:
+    if cache and cache.exists():
+        stored = json.loads(cache.read_text())
+        return stored["mean"], stored["std"]
+    mean, std = image_pixel_stats(ImageDataset(splits["train"]), batch_size=batch_size)
+    if cache:
+        cache.write_text(json.dumps({"mean": mean, "std": std, "source": "train split only"}))
+    return mean, std
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default="data/raw/extracted")
@@ -77,6 +89,8 @@ def main() -> None:
     parser.add_argument("--seeds", default="7,17,27")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=PAPER_20D.batch_size)
+    parser.add_argument("--eval-batch-size", type=int, default=1024)
+    parser.add_argument("--stats-file", default="")
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--configs", default="main")
     parser.add_argument("--patience", type=int, default=PAPER_20D.early_stopping_patience)
@@ -97,12 +111,12 @@ def main() -> None:
 
     bundle = load_real_data(args.data_dir, target="Retx_20d_label", horizon="20d", return_column="Retx_20d", lazy=True)
     splits = temporal_split(bundle)
-    mean, std = image_pixel_stats(ImageDataset(splits["train"]), batch_size=args.batch_size)
+    mean, std = normalization_stats(splits, args.batch_size, Path(args.stats_file) if args.stats_file else None)
     print(json.dumps({"normalization_mean": mean, "normalization_std": std, "source": "train split only"}), flush=True)
     datasets = {
         name: IterableImageDataset(
             part,
-            batch_size=args.batch_size,
+            batch_size=args.batch_size if name == "train" else args.eval_batch_size,
             mean=mean,
             std=std,
             shuffle=name == "train",
