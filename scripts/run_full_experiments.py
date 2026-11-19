@@ -101,6 +101,7 @@ def main() -> None:
     parser.add_argument("--configs", default="main")
     parser.add_argument("--patience", type=int, default=PAPER_20D.early_stopping_patience)
     args = parser.parse_args()
+    torch.set_num_threads(1)
     tag = args.target.removeprefix("Retx_").removesuffix("_label")
     if args.epochs < 1:
         raise ValueError("epochs must be positive")
