@@ -21,7 +21,7 @@ from price_trends.data import (
     load_real_data,
     temporal_split,
 )
-from price_trends.models import LogisticBaseline, MLPBaseline, PriceTrendCNN
+from price_trends.models import LogisticBaseline, MLPBaseline, PriceTrendCNN, TemporalConv
 from price_trends.references import PAPER_20D, REPRODUCIBILITY_SEED
 from price_trends.services.evaluation import classification_metrics, long_short_metrics
 from price_trends.services.training import fit, predict_proba, set_seed
@@ -30,6 +30,8 @@ CONFIGS = {
     "logistic": LogisticBaseline,
     "mlp": MLPBaseline,
     "cnn": PriceTrendCNN,
+    "minimal": lambda: TemporalConv(filters=16),
+    "minimal_1f": lambda: TemporalConv(filters=1),
 }
 
 ABLATION_CONFIGS = {
@@ -59,6 +61,8 @@ def write_results(output: Path, seeds, mean, std, args, results: list[dict[str, 
             {
                 "seeds_requested": list(seeds),
                 "seeds_completed": sorted({int(item["seed"]) for item in results}),
+                "target": args.target,
+                "return_column": args.return_column,
                 "eval_batch_size": args.eval_batch_size,
                 "normalization_mean": mean,
                 "normalization_std": std,
@@ -85,6 +89,8 @@ def normalization_stats(splits, batch_size: int, cache: Path | None) -> tuple[fl
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default="data/raw/extracted")
+    parser.add_argument("--target", default="Retx_20d_label")
+    parser.add_argument("--return-column", default="Retx_20d")
     parser.add_argument("--output", default="artifacts/full_seeds")
     parser.add_argument("--seeds", default="7,17,27")
     parser.add_argument("--epochs", type=int, default=100)
@@ -95,6 +101,7 @@ def main() -> None:
     parser.add_argument("--configs", default="main")
     parser.add_argument("--patience", type=int, default=PAPER_20D.early_stopping_patience)
     args = parser.parse_args()
+    tag = args.target.removeprefix("Retx_").removesuffix("_label")
     if args.epochs < 1:
         raise ValueError("epochs must be positive")
     available = {**CONFIGS, **ABLATION_CONFIGS}
@@ -109,7 +116,7 @@ def main() -> None:
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
 
-    bundle = load_real_data(args.data_dir, target="Retx_20d_label", horizon="20d", return_column="Retx_20d", lazy=True)
+    bundle = load_real_data(args.data_dir, target=args.target, horizon="20d", return_column=args.return_column, lazy=True)
     splits = temporal_split(bundle)
     mean, std = normalization_stats(splits, args.batch_size, Path(args.stats_file) if args.stats_file else None)
     print(json.dumps({"normalization_mean": mean, "normalization_std": std, "source": "train split only"}), flush=True)
@@ -142,7 +149,7 @@ def main() -> None:
                 epochs=args.epochs,
                 patience=args.patience,
                 device=args.device,
-                checkpoint=output / f"seed_{seed}_{name}_20d.pt",
+                checkpoint=output / f"seed_{seed}_{name}_{tag}.pt",
                 amp=args.device.startswith("cuda"),
             )
             metrics, probabilities = evaluate(model, splits["test"], loaders["test"], args.device)
@@ -155,7 +162,7 @@ def main() -> None:
                     "probability": probabilities,
                 }
             )
-            frame.to_parquet(output / f"seed_{seed}_{name}_predictions.parquet")
+            frame.to_parquet(output / f"seed_{seed}_{name}_{tag}_predictions.parquet")
             results.append(
                 {
                     "seed": seed,
