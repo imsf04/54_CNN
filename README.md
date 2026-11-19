@@ -64,6 +64,8 @@ jupyter notebook notebooks/price_trends_replication.ipynb
 
 Notebook 用中文 Markdown 组织数据检查、训练、样本外指标、训练曲线，并保存测试集预测。报告在 [reports/replication_report.tex](reports/replication_report.tex)，编译产物为 reports/replication_report.pdf；十分位组合、换手、成本、分时段与遮挡结果由 scripts/analyze_predictions.py、scripts/analyze_seeds.py 与 scripts/occlusion_test.py 从保存的预测重建。参数出处在 [docs/references/README.md](docs/references/README.md)。
 
+全量多 seed、horizon 与极简模型实验由 `scripts/run_full_experiments.py` 产生；`scripts/window_mask.py` 做窗口剥离，`scripts/summarize_horizons.py` 汇总 AUC 与组合指标。
+
 ## 检查
 
 ```bash

@@ -23,7 +23,9 @@
 - 架构筛查：12,000 样本、4 epoch、三 seed，定位是吞吐与训练协议验收（profile 预算），不作为统计结论；每个配置的训练预算相同。
 - 全量架构消融：15 个 run（5 个配置 × 3 个 seed），每个 8 epoch、训练 batch 128、评估 batch 1024，已完成；结果写入报告第 5 节与表 4。
 - 吞吐：训练保持 batch 128（论文协议），batch 128 时 GPU 利用率中位 59–69%，bottleneck 是小模型的每步固定开销，不是数据加载；评估用 batch 1024（与 128 的概率差为浮点舍入级）。测量见 `docs/research/training_profile.md`。
-- 解释：Grad-CAM 与遮挡实验使用单次全量运行的 CNN checkpoint；5d/60d 不做，课程数据只提供 20-day 标签。
+- 解释：Grad-CAM 与遮挡实验使用单次全量运行的 CNN checkpoint；窗口剥离用同一 checkpoint 在全部 1,491,887 测试行上做，保留 k=3/5/10/20/40/60 天。
+- 多 horizon：同一批 20-day 图像训练 5d/20d/60d 标签（标签文件含 `Retx_5d_label`、`Retx_60d_label` 与对应收益列），三 seed；20d 为主结果，5d/60d 检验信号随期限衰减。
+- 极简模型：`TemporalConv`（1×3 卷积 + 时间平均 + 线性头，3,138 参数）与单滤波变体（198 参数），同协议三 seed，用于分离二维结构与分类器尾部行为。
 
 ## 未决事项
 

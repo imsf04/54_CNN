@@ -57,3 +57,11 @@ Read-only SSH check of `10.10.20.20` found both GPUs occupied: GPU 0 at 95% util
 - batch 256/512/1024 吞吐为 12,740/13,099/13,572 samples/s，利用率升到 79–81%；channels-last 10,909、`torch.compile` 10,621，与 baseline 的差异在测量噪声内。
 - 评估 batch 128 fp32 为 18.0 秒/20.7 万行，batch 1024 为 10.2 秒；两者概率最大差 `1.10e-06`、平均 `1.43e-07`。
 - 决定：训练保持 batch 128（论文协议），评估使用 batch 1024；12,000 样本/4 epoch 的定位是吞吐与协议验收预算，不作为统计结论。详见 `docs/research/training_profile.md` 与 `artifacts/training_profile.json`。
+
+## 扩展：horizon、窗口剥离与极简模型 — 2026-11-19
+
+- 窗口剥离（`scripts/window_mask.py`，seed-7 全量 CNN checkpoint，1,491,887 测试行）：保留 60/40/20/10/5/3 天的 AUC 为 0.5286/0.5292/0.5317/0.5324/0.5316/0.5115；最近 10 天保留全部信号，更早的 40–50 天对分类是噪声或轻微拖累。
+- horizon（RTX 4090D，三 seed，`scripts/run_full_experiments.py --target`）：AUC（logistic/MLP/CNN）5d 0.5373/0.5306/0.5348，20d 0.5251/0.5275/0.5300，60d 0.5192/0.5246/0.5276；组合 Sharpe 5d 2.82/2.27/2.34，20d 1.94/1.60/1.70，60d 1.02/0.92/1.05。模型排序随 horizon 变化，Sharpe 比 AUC 衰减更快。
+- 极简模型（`src/price_trends/models/minimal.py` 的 `TemporalConv`）：3,138 参数 AUC 0.5196±0.0009、Sharpe 0.06±0.04；198 参数单滤波变体 AUC 0.5108±0.0079、Sharpe 0.16±0.38。AUC 接近线性模型，但十分位组合分离消失，说明平均排序信息与尾部收益是两件事。
+- 训练环境：RTX 4090D 24 GB、torch 2.12.1+cu130；`torch.set_num_threads(1)` 后单 epoch 从 107.5 s 降到 11.5 s（192 核机器的线程自旋），主实验仍用训练 batch 128、评估 batch 1024。
+- 报告：第 5 节加入窗口剥离段，新增第 6 节与表 5、表 6；PDF 为 8 页。

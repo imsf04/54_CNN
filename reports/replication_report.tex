@@ -20,7 +20,7 @@
 
 \begin{abstract}
 \noindent
-Jiang, Kelly, and Xiu (2023) encode past prices as images and report that a convolutional network reads predictive structure out of them. We replicate their 20-day specification on the course panel (1993--2019) and ask three questions that the original performance table leaves open. First, does the image representation carry out-of-sample information beyond models that see exactly the same pixels, namely a linear model and an MLP? Second, does the probability ranking survive as a portfolio once the annualisation is done correctly, trading costs are charged, and the sample is split by period? Third, is the dependence the network learns a stable price shape or a property of particular historical stretches? We train every model on three seeds and report the variation. On 1.49 million out-of-sample rows the CNN reaches an AUC of $0.530\pm0.004$ against $0.527\pm0.001$ for the MLP and $0.525\pm0.001$ for the linear model. The top-decile long--short portfolio earns seed-average Sharpe ratios of $1.70\pm0.35$ for the CNN, $1.94\pm0.18$ for the linear model, and $1.60\pm0.12$ for the MLP; averaging the three seeds' probabilities gives 1.88, 1.99, and 1.65, and net of 10 basis points 1.51, 1.46, and 1.29. The classification gain is small and inside seed variation, and it does not translate into a reliable portfolio advantage. The economic separation is real for all three models but concentrated before 2013. A column-occlusion test shows that predictions depend most on the three most recent columns of the image, and that Grad-CAM highlights columns that matter more than random columns but less than recency itself. We read the evidence as a representation that is informative, locally faithful, and strongly non-stationary, rather than as evidence of a transferable price shape.
+Jiang, Kelly, and Xiu (2023) encode past prices as images and report that a convolutional network reads predictive structure out of them. We replicate their 20-day specification on the course panel (1993--2019) and ask three questions that the original performance table leaves open. First, does the image representation carry out-of-sample information beyond models that see exactly the same pixels, namely a linear model and an MLP? Second, does the probability ranking survive as a portfolio once the annualisation is done correctly, trading costs are charged, and the sample is split by period? Third, is the dependence the network learns a stable price shape or a property of particular historical stretches? We train every model on three seeds and report the variation. On 1.49 million out-of-sample rows the CNN reaches an AUC of $0.530\pm0.004$ against $0.527\pm0.001$ for the MLP and $0.525\pm0.001$ for the linear model. The top-decile long--short portfolio earns seed-average Sharpe ratios of $1.70\pm0.35$ for the CNN, $1.94\pm0.18$ for the linear model, and $1.60\pm0.12$ for the MLP; averaging the three seeds' probabilities gives 1.88, 1.99, and 1.65, and net of 10 basis points 1.51, 1.46, and 1.29. The classification gain is small and inside seed variation, and it does not translate into a reliable portfolio advantage. The economic separation is real for all three models but concentrated before 2013. A column-occlusion test shows that predictions depend most on the three most recent columns of the image, and that Grad-CAM highlights columns that matter more than random columns but less than recency itself. We read the evidence as a representation that is informative, locally faithful, and strongly non-stationary, rather than as evidence of a transferable price shape. Predictability falls as the horizon lengthens: the linear model's AUC is $0.537$ at five days, $0.525$ at twenty, and $0.519$ at sixty, and its decile Sharpe ratio falls from $2.82$ to $1.94$ and $1.02$. Masking the older columns of the image leaves the CNN's AUC unchanged or slightly higher, while a three-day window collapses it, so nearly all of the signal sits in the most recent two weeks. A 3{,}138-parameter model that convolves only across price levels and averages over time reaches an AUC close to the linear model but earns no portfolio return, which separates the two-dimensional inductive bias from the tail behaviour that a decile strategy needs.
 \end{abstract}
 
 \section{Introduction}
@@ -48,7 +48,7 @@ Our answers are precise but less flattering than a leaderboard. Averaged over th
 \textbf{Models.} All three models consume the same normalised image. Logistic regression is a single linear layer over the flattened image. The MLP is one hidden layer of 128 units with ReLU and dropout 0.25. The CNN follows the paper's 20-day configuration: three convolutional blocks with $5\times3$ kernels, $2\times1$ max pooling, vertical stride 3 and vertical dilation 2 in the first block, 64/128/256 filters, batch normalisation before a LeakyReLU with slope 0.01, 50\% dropout before the classifier, and Xavier initialisation; it has 708{,}866 parameters. All models are trained with cross-entropy, Adam at $10^{-5}$, batch size 128, and early stopping after two epochs without validation improvement, as in the paper. We report the checkpoint with the lowest validation loss.
 
 \textbf{Runs.} We train each model three times, with seeds 7, 17, and 27, on the full sample, using one V100 GPU with mixed precision. The CNN runs between 5 and 16 epochs, the MLP 8 to 9, and the linear model 18 to 22; early stopping selects a checkpoint in each case. An earlier single run of the same protocol on a hosted Kaggle GPU serves as an independent repeat and reproduces the same order of magnitude on every metric.
-
+\textbf{Runs.} We train each model three times, with seeds 7, 17, and 27, on the full sample, first on a V100 and then on an RTX 4090D, both with mixed precision. The CNN runs between 5 and 16 epochs, the MLP 8 to 9, and the linear model 18 to 22; early stopping selects a checkpoint in each case. An earlier single run of the same protocol on a hosted Kaggle GPU serves as an independent repeat and reproduces the same order of magnitude on every metric.
 \textbf{Portfolio construction.} For each of the 240 test dates we rank stocks by predicted probability, go long the top decile and short the bottom decile with equal weights, and hold for the 20 trading days until the next cross-section. The portfolio return is the difference between the mean returns of the two legs. Because the cross-sections are monthly, the Sharpe ratio is annualised with 12 periods per year, $\text{SR}=\bar r/\hat\sigma\sqrt{12}$; annualising a 240-month series with the daily convention of 252 overstates the ratio by $\sqrt{21}\approx4.6$. The weights on the two legs sum to $+1$ and $-1$, so the book carries gross exposure 2. Turnover is $\tau_t=\tfrac12\sum_i|w_{i,t}-w_{i,t-1}|$, and a one-way cost $c$ in basis points is charged as $2c\,\tau_t$, because each unit of $\tau$ corresponds to two units of traded notional in a two-leg book. We also report the top/bottom 20\% sensitivity.
 
 \section{Question 1: does the image representation add information?}
@@ -184,7 +184,59 @@ CNN wide         & $0.529\pm0.003$ & $0.528\pm0.003$ & $1.67\pm0.14$ & $1.61\pm0
 
 \textbf{Occlusion.} Visual inspection cannot establish that the highlighted region is what the prediction depends on, so we remove it. On 200 high-confidence true positives we mask three columns of the input at a time and record the drop in predicted probability. Masking the three columns with the highest mean Grad-CAM attribution lowers the probability by 0.039 on average ($t=11.3$); masking three random columns lowers it by 0.010 ($t=5.8$); masking the three most recent columns lowers it by 0.080 ($t=17.6$); masking the three oldest columns slightly raises it ($-0.008$). The ranking of the interventions is informative: Grad-CAM points at columns that matter, roughly four times as much as random columns, but the recency of the column matters more than the attribution. The network's decision is dominated by the last few days of the image.
 
-This is the sharpest answer we can give to Q3. The CNN does not appear to rely on a stable multi-week shape that can be transported across periods. It relies on the most recent part of the window, which is where a short-horizon momentum signal would sit, and the economic value of that signal falls exactly when the later sample stops rewarding it. The time decay of AUC and of portfolio returns is the same phenomenon observed from two directions.
+
+
+\textbf{Window.} The occlusion test is local; a window-mask test asks how much of the 60-day input the network needs. We mask every column older than $T-k$ days, keep the $k$ most recent columns, and recompute the AUC of the seed-7 CNN checkpoint on all 1{,}491{,}887 test rows. With $k=60$ the AUC is $0.5286$; it rises to $0.5324$ at $k=10$, is $0.5317$ at $k=20$, $0.5316$ at $k=5$, and falls to $0.5115$ at $k=3$. Keeping the last ten days preserves all of the classification performance and the older fifty days contribute noise, so the model's effective window is about two weeks rather than the full quarter.
+
+This is the sharpest answer we can give to Q3. The CNN does not appear to rely on a stable multi-week shape that can be transported across periods. It relies on the most recent part of the window, which is where a short-horizon momentum signal would sit; the window test bounds that part at about ten days. The economic value of that signal falls exactly when the later sample stops rewarding it. The time decay of AUC and of portfolio returns is the same phenomenon observed from two directions.
+
+\section{Beyond the 20-day horizon and the full architecture}
+
+\textbf{Horizon.} If the network reads short-window momentum, its predictability should decay as the label horizon lengthens. We retrain all three baselines for five- and sixty-day labels, holding the images, split, normalisation, optimiser, early-stopping rule, and three seeds fixed (Table~\ref{tab:horizons}). The decline is monotone. The linear model loses $0.018$ AUC and $1.80$ Sharpe going from five to sixty days; the CNN loses $0.007$ AUC and $1.29$ Sharpe. The model ordering also changes with the horizon: the linear model has the highest AUC at five days ($0.537$ against $0.535$ and $0.531$), while the CNN has the highest at sixty ($0.528$ against $0.525$ and $0.519$). Statements about which model is best are therefore horizon-specific, and the Sharpe ratio falls faster than the AUC because the decile spread depends on the tails.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Out-of-sample AUC and top-decile Sharpe ratio by prediction horizon, mean $\pm$ standard deviation over seeds 7, 17, and 27. The 20-day rows repeat Tables~\ref{tab:classification} and~\ref{tab:portfolio}.}
+\label{tab:horizons}
+\begin{tabular}{llcc}
+\toprule
+Horizon & Model & AUC & Decile Sharpe \\
+\midrule
+5 days  & Logistic & $0.5373\pm0.0005$ & $2.82\pm0.07$ \\
+        & MLP      & $0.5306\pm0.0006$ & $2.27\pm0.07$ \\
+        & CNN      & $0.5348\pm0.0079$ & $2.34\pm0.44$ \\
+20 days & Logistic & $0.5251\pm0.0008$ & $1.94\pm0.18$ \\
+        & MLP      & $0.5275\pm0.0009$ & $1.60\pm0.12$ \\
+        & CNN      & $0.5300\pm0.0038$ & $1.70\pm0.35$ \\
+60 days & Logistic & $0.5192\pm0.0003$ & $1.02\pm0.04$ \\
+        & MLP      & $0.5246\pm0.0005$ & $0.92\pm0.05$ \\
+        & CNN      & $0.5276\pm0.0008$ & $1.05\pm0.10$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Minimal representation.} The window result suggests that the two-dimensional kernel may be doing little. We test that directly with a model that applies a single $1\times3$ convolution across the 64 price rows, averages the result over the 60 days, and classifies linearly. It has 3{,}138 parameters, 0.4\% of the CNN, and no two-dimensional structure. Its AUC, $0.5196\pm0.0009$, is within $0.006$ of the linear model and $0.010$ of the CNN, so the bulk of the classification signal does not require the 2D kernel (Table~\ref{tab:minimal}). Its portfolio, however, earns $0.06\pm0.04$, against $1.94$ for the linear model on the same pixels. The decile profile of the seed-7 model is flat and turns down at the top: the ten deciles earn $0.36$, $0.47$, $0.48$, $0.51$, $0.55$, $0.52$, $0.44$, $0.48$, $0.45$, $0.37$ percent per month. The ordering carries information in the body of the distribution but not in the tails that the portfolio trades. A one-filter variant with 198 parameters behaves like a near-constant predictor and serves as a floor. The comparison separates two things that the replication conflates: the two-dimensional inductive bias contributes little to the average ranking, and the tail behaviour a decile strategy needs is a separate property of the fitted classifier.
+
+\begin{table}[h!]
+\centering
+\small
+\caption{20-day models ordered by capacity, mean $\pm$ standard deviation over seeds 7, 17, and 27. Temporal applies a single $1\times3$ convolution across the 64 price rows and averages over the 60 days.}
+\label{tab:minimal}
+\begin{tabular}{lrrr}
+\toprule
+Model & Parameters & AUC & Decile Sharpe \\
+\midrule
+Logistic      & 7{,}682   & $0.5251\pm0.0008$ & $1.94\pm0.18$ \\
+MLP           & 491{,}906 & $0.5275\pm0.0009$ & $1.60\pm0.12$ \\
+CNN           & 708{,}866 & $0.5300\pm0.0038$ & $1.70\pm0.35$ \\
+Temporal (16) & 3{,}138   & $0.5196\pm0.0009$ & $0.06\pm0.04$ \\
+Temporal (1)  & 198       & $0.5108\pm0.0079$ & $0.16\pm0.38$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both extensions follow the main runs' early-stopping protocol; the temporal architecture was not tuned, so its AUC is a lower bound for temporal-only models. Read together, the two experiments locate the signal in the last ten days, in a roughly linear combination of price levels, and in the tails of the cross-sectional ordering. The 60-day window and the convolutional depth are not what make the replication work.
 
 \section{Limitations}
 
