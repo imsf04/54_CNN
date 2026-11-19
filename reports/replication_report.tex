@@ -152,23 +152,23 @@ Turnover is high: $\tau\approx1.77$, so the portfolio replaces roughly 88\% of i
 
 \section{Question 3: a stable shape or a period-specific regularity?}
 
-\textbf{Architecture ablations.} With a fixed 12{,}000-sample budget, four epochs, and three seeds, no architecture variant separates from the others: AUC ranges from 0.492 to 0.508 across two, three, and four blocks and narrow and wide filter stacks, and the decile Sharpe ratios are statistically indistinguishable from zero (Table~\ref{tab:ablation}). The budget is too small to train any of these models well, and the seed standard deviations of the full-data runs are of the same order as the differences between variants here, so this table is evidence about the protocol, not about architecture.
+\textbf{Architecture ablations.} On the full sample, with eight epochs and three seeds, the five variants sit within $0.0015$ AUC of one another ($0.528$ to $0.529$), inside the $0.0038$ seed standard deviation of the main runs (Table~\ref{tab:ablation}). Two blocks, three blocks, four blocks, narrow, and wide stacks therefore do not produce a reliable ranking on classification. The decile Sharpe ratios span 1.44 (narrow) to 1.75 (two blocks), but the ordering is not stable across seeds: the two-block variant has both the highest mean and the smallest standard deviation ($0.05$), while the four-block and narrow variants are the weakest at $1.48\pm0.26$ and $1.44\pm0.08$. A linear model on the same pixels still earns $1.94\pm0.18$. Depth and width are not where the differences between these models come from.
 
-\begin{table}[t]
+\begin{table}[h!]
 \centering
 \small
-\caption{Fixed-budget architecture ablation, 12{,}000 samples, 4 epochs, seeds 7/17/27 (mean $\pm$ standard deviation). Portfolio Sharpe annualised with 12 periods.}
+\caption{Full-sample architecture ablation, 8 epochs, seeds 7/17/27 (mean $\pm$ standard deviation). The logistic row repeats the main run for reference. Portfolio Sharpe annualised with 12 periods.}
 \label{tab:ablation}
 \begin{tabular}{lcccc}
 \toprule
 Configuration & AUC & AP & Decile Sharpe & 20\% Sharpe \\
 \midrule
-Logistic         & $0.504\pm0.004$ & $0.509\pm0.003$ & $0.215$ & $0.175$ \\
-CNN 2 blocks     & $0.492\pm0.008$ & $0.500\pm0.004$ & $-0.213$ & $-0.014$ \\
-CNN 3 blocks     & $0.493\pm0.009$ & $0.499\pm0.007$ & $0.161$ & $0.162$ \\
-CNN 4 blocks     & $0.494\pm0.005$ & $0.501\pm0.003$ & $0.145$ & $0.052$ \\
-CNN narrow       & $0.500\pm0.008$ & $0.504\pm0.006$ & $-0.054$ & $0.026$ \\
-CNN wide         & $0.508\pm0.009$ & $0.513\pm0.009$ & $0.011$ & $0.117$ \\
+Logistic         & $0.525\pm0.001$ & $0.526\pm0.001$ & $1.94\pm0.18$ & $1.85\pm0.12$ \\
+CNN 2 blocks     & $0.528\pm0.001$ & $0.528\pm0.001$ & $1.75\pm0.05$ & $1.71\pm0.03$ \\
+CNN 3 blocks     & $0.529\pm0.004$ & $0.527\pm0.002$ & $1.72\pm0.21$ & $1.66\pm0.20$ \\
+CNN 4 blocks     & $0.528\pm0.003$ & $0.527\pm0.002$ & $1.48\pm0.26$ & $1.44\pm0.19$ \\
+CNN narrow       & $0.529\pm0.001$ & $0.528\pm0.001$ & $1.44\pm0.08$ & $1.41\pm0.08$ \\
+CNN wide         & $0.529\pm0.003$ & $0.528\pm0.003$ & $1.67\pm0.14$ & $1.61\pm0.20$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -188,7 +188,7 @@ This is the sharpest answer we can give to Q3. The CNN does not appear to rely o
 
 \section{Limitations}
 
-The study covers one dataset and one asset class, and the course panel ends in 2019; nothing here speaks to post-2019 behaviour. The portfolio analysis charges proportional costs but ignores borrow constraints, bid--ask spread heterogeneity, and market impact, all of which are material at monthly turnover near 180\%. The 20-day holding period and monthly rebalancing produce non-overlapping returns by construction, which keeps the $t$-statistics honest, but the resulting 240 observations limit the power of the subperiod comparisons. We train the main comparison with three seeds, which quantifies run-to-run variation for the headline numbers: seed standard deviations are 0.0038 in AUC and 0.35 in Sharpe for the CNN, so differences of a few thousandths in AUC or a few tenths in Sharpe should not be read as reliable rankings of models. The architecture comparison uses a fixed 12{,}000-sample budget rather than the full sample. Finally, the paper's development window (1993--2000) and test window (2001--2019) differ from the course split, so we replicate the specification rather than the exact experiment.
+The study covers one dataset and one asset class, and the course panel ends in 2019; nothing here speaks to post-2019 behaviour. The portfolio analysis charges proportional costs but ignores borrow constraints, bid--ask spread heterogeneity, and market impact, all of which are material at monthly turnover near 180\%. The 20-day holding period and monthly rebalancing produce non-overlapping returns by construction, which keeps the $t$-statistics honest, but the resulting 240 observations limit the power of the subperiod comparisons. We train the main comparison with three seeds, which quantifies run-to-run variation for the headline numbers: seed standard deviations are 0.0038 in AUC and 0.35 in Sharpe for the CNN, so differences of a few thousandths in AUC or a few tenths in Sharpe should not be read as reliable rankings of models. The architecture comparison uses the full sample but an eight-epoch budget, shorter than the main runs' early-stopping schedule, so its levels are not directly comparable to Table~1. Finally, the paper's development window (1993--2000) and test window (2001--2019) differ from the course split, so we replicate the specification rather than the exact experiment.
 
 \section{Reproducibility, AI use, and contributions}
 

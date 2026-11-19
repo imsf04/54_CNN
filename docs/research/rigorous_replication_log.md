@@ -47,7 +47,7 @@ Read-only SSH check of `10.10.20.20` found both GPUs occupied: GPU 0 at 95% util
 - 三 seed 结果（mean±sd）：Logistic AUC `0.5251±0.0008`、Sharpe `1.94±0.18`；MLP AUC `0.5275±0.0009`、Sharpe `1.60±0.12`；CNN AUC `0.5300±0.0038`、Sharpe `1.70±0.35`。三个 seed 概率平均后的 Sharpe 为 1.99/1.65/1.88，扣除 10 bps 成本为 1.46/1.29/1.51。
 - 判断：CNN 的 AUC 优势只有 0.0025–0.0049，小于自身 seed 标准差 0.0038；组合 Sharpe 的 seed 标准差 0.35 约为其他模型两倍，单次全量运行的 CNN 高收益不能作为结论。
 - 分时段：三个模型在 2013–2019 都衰减，AUC 0.511–0.516，月均组合收益 0.45–0.65%。
-- 全量架构消融：15 个 run（5 个配置 × 3 个 seed），每个 8 epoch、训练 batch 128、评估 batch 1024，预计 8–11 分钟/run；运行记录在 `/root/autodl-tmp/runs/20261119-0047-full-ablations/`。此前按 20 分钟/run 估算并中止的判断有误，主实验实测约 4 分钟/run。
+- 全量架构消融完成：15 个 run（5 个配置 × 3 个 seed），每个 8 epoch、训练 batch 128、评估 batch 1024，共约 3.5 小时；结果在 `artifacts/full_ablations/results.json`，日志与命令在 `artifacts/full_ablations/`。均值±标准差（AUC / Sharpe）：2 blocks `0.528±0.001 / 1.75±0.05`，3 blocks `0.529±0.004 / 1.72±0.21`，4 blocks `0.528±0.003 / 1.48±0.26`，narrow `0.529±0.001 / 1.44±0.08`，wide `0.529±0.003 / 1.67±0.14`。五个变体的 AUC 差距在 seed 波动内，深度与宽度不产生可靠排序；报告第 5 节已改为全量消融表。
 - 决定：报告以三 seed 均值与 seed 平均后的组合为主，单次 Kaggle 运行只作为独立重复；Grad-CAM 与遮挡实验使用该单次运行的 checkpoint。
 
 ## 训练吞吐剖析 — 2026-11-19
