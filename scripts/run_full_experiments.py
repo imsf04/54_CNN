@@ -108,7 +108,7 @@ def main() -> None:
     available = {**CONFIGS, **ABLATION_CONFIGS}
     torch.backends.cudnn.benchmark = args.device.startswith("cuda")
     if args.configs == "main":
-        selected = dict(CONFIGS)
+        selected = {name: CONFIGS[name] for name in ("logistic", "mlp", "cnn")}
     elif args.configs == "ablations":
         selected = dict(ABLATION_CONFIGS)
     else:
