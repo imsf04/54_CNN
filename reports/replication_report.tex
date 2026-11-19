@@ -39,7 +39,7 @@ Our answers are precise but less flattering than a leaderboard. Averaged over th
 
 \section{Data and protocol}
 
-\textbf{Data.} The course provides 27 yearly pairs of image and label files for the 20-day horizon, 1993--2019. Each image is $64\times60$: 60 columns of trading days, 64 rows covering open, high, low, close, moving averages, and volume bars. Labels are 1 for a positive 20-day forward return, 0 otherwise, and 2 for missing. After dropping missing labels we keep 2{,}181{,}781 samples with a positive rate of 50.6\%.
+\textbf{Data.} The course provides 27 yearly pairs of image and label files for the 20-day horizon, 1993--2019. Each image is $64\times60$: 60 columns of trading days, 64 rows covering open, high, low, close, moving averages, and volume bars. Labels are 1 for a positive 20-day forward return, 0 otherwise, and 2 for missing. Each yearly label file also carries five- and sixty-day labels and returns, which we use for the horizon comparison in Section~\ref{sec:beyond}; every experiment uses the same 20-day images. After dropping missing labels we keep 2{,}181{,}781 samples with a positive rate of 50.6\%.
 
 \textbf{Split.} Following the course protocol, 1993--1999 is the development sample, split 70/30 at random into training (482{,}925) and validation (206{,}969) sets; 2000--2019 is the out-of-sample test set (1{,}491{,}887 rows, 240 monthly cross-sections). The test set is never used for model selection. This differs from the paper, which uses 1993--2000 for development and 2001--2019 for testing; we note the difference wherever it could matter.
 
@@ -191,6 +191,7 @@ CNN wide         & $0.529\pm0.003$ & $0.528\pm0.003$ & $1.67\pm0.14$ & $1.61\pm0
 This is the sharpest answer we can give to Q3. The CNN does not appear to rely on a stable multi-week shape that can be transported across periods. It relies on the most recent part of the window, which is where a short-horizon momentum signal would sit; the window test bounds that part at about ten days. The economic value of that signal falls exactly when the later sample stops rewarding it. The time decay of AUC and of portfolio returns is the same phenomenon observed from two directions.
 
 \section{Beyond the 20-day horizon and the full architecture}
+\label{sec:beyond}
 
 \textbf{Horizon.} If the network reads short-window momentum, its predictability should decay as the label horizon lengthens. We retrain all three baselines for five- and sixty-day labels, holding the images, split, normalisation, optimiser, early-stopping rule, and three seeds fixed (Table~\ref{tab:horizons}). The decline is monotone. The linear model loses $0.018$ AUC and $1.80$ Sharpe going from five to sixty days; the CNN loses $0.007$ AUC and $1.29$ Sharpe. The model ordering also changes with the horizon: the linear model has the highest AUC at five days ($0.537$ against $0.535$ and $0.531$), while the CNN has the highest at sixty ($0.528$ against $0.525$ and $0.519$). Statements about which model is best are therefore horizon-specific, and the Sharpe ratio falls faster than the AUC because the decile spread depends on the tails.
 
