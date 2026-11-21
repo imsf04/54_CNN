@@ -66,6 +66,12 @@ Notebook 用中文 Markdown 组织数据检查、训练、样本外指标、训�
 
 全量多 seed、horizon 与极简模型实验由 `scripts/run_full_experiments.py` 产生；`scripts/window_mask.py` 做窗口剥离，`scripts/summarize_horizons.py` 汇总 AUC 与组合指标。
 
+### 下载当前改动的报告 PDF
+
+面向 `main` 的 PR 或推送到 `main` 时，如果修改了 `reports/` 下的 TeX 源码、`reports/figures/` 中的配图或[编译工作流](.github/workflows/build-report.yml)本身，GitHub Actions 会重新编译报告。打开 **Actions → Build report PDF**，选择对应的成功运行，在 **Artifacts** 下下载 `replication_report.pdf`。也可以在该工作流页面选择 **Run workflow** 手动编译。
+
+工作流使用仓库内的四张配图，不运行训练，也不会覆盖仓库中已有的 PDF。
+
 ## 检查
 
 ```bash
